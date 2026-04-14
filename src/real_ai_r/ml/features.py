@@ -355,18 +355,18 @@ class FeatureEngineer:
 
         # Use arithmetic sum of daily returns to match training path
         daily_changes = np.diff(closes) / closes[:-1] * 100 if n >= 2 else np.array([])
-        if n >= 3:
+        if n >= 4:
             feat["momentum_3d"] = float(np.sum(daily_changes[-3:]))
-        if n >= 5:
+        if n >= 6:
             feat["momentum_5d"] = float(np.sum(daily_changes[-5:]))
-        if n >= 10:
+        if n >= 11:
             feat["momentum_10d"] = float(np.sum(daily_changes[-10:]))
 
-        if n >= 5:
-            returns = np.diff(closes[-5:]) / closes[-5:-1] * 100
+        if n >= 6:
+            returns = np.diff(closes[-6:]) / closes[-6:-1] * 100
             feat["volatility_5d"] = float(np.std(returns))
-        if n >= 10:
-            returns = np.diff(closes[-10:]) / closes[-10:-1] * 100
+        if n >= 11:
+            returns = np.diff(closes[-11:]) / closes[-11:-1] * 100
             feat["volatility_10d"] = float(np.std(returns))
 
         if volumes is not None and n >= 5:
@@ -388,8 +388,8 @@ class FeatureEngineer:
             rng = high_20 - low_20
             feat["price_position"] = float((closes[-1] - low_20) / rng) if rng > 0 else 0.5
 
-        if n >= 14:
-            daily_returns = np.diff(closes[-14:]) / closes[-14:-1] * 100
+        if n >= 15:
+            daily_returns = np.diff(closes[-15:]) / closes[-15:-1] * 100
             gains = np.where(daily_returns > 0, daily_returns, 0)
             losses = np.where(daily_returns < 0, -daily_returns, 0)
             avg_gain = np.mean(gains)
