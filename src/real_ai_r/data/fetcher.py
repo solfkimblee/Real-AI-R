@@ -113,16 +113,6 @@ class DataFetcher:
         logger.info("获取指数行情: %s", symbol)
         df = ak.stock_zh_index_daily_em(symbol=f"sh{symbol}")
 
-        df = df.rename(
-            columns={
-                "date": "date",
-                "open": "open",
-                "high": "high",
-                "low": "low",
-                "close": "close",
-                "volume": "volume",
-            }
-        )
         df["date"] = pd.to_datetime(df["date"])
         mask = (df["date"] >= pd.to_datetime(start_date)) & (
             df["date"] <= pd.to_datetime(end_date)

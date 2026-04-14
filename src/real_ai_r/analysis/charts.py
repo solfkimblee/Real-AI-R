@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import pandas as pd
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 
@@ -113,19 +114,19 @@ def plot_drawdown(result: BacktestResult) -> go.Figure:
 
 
 def plot_candlestick_with_signals(
-    data: dict,
+    data: pd.DataFrame | dict,
     result: BacktestResult,
 ) -> go.Figure:
     """绘制K线图 + 交易信号。
 
     Parameters
     ----------
-    data : dict
+    data : pd.DataFrame | dict
         行情数据，需包含 date, open, high, low, close, volume。
     result : BacktestResult
         回测结果（用于标记买卖点）。
     """
-    df = data if hasattr(data, "iloc") else data
+    df = data if hasattr(data, "iloc") else pd.DataFrame(data)
     fig = make_subplots(
         rows=2,
         cols=1,
