@@ -1,6 +1,6 @@
 """Real-AI-R Streamlit Dashboard
 
-A股量化交易系统 — 交互式回测平台 + 板块分析
+A股量化交易系统 — 交互式回测平台 + 板块分析 + 宏观分析
 """
 
 from __future__ import annotations
@@ -14,6 +14,13 @@ import streamlit as st
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
 import pandas as pd
+from pages_macro import (
+    render_cycle_dashboard,
+    render_portfolio,
+    render_redline_guide,
+    render_sector_classification,
+    render_tech_tracker,
+)
 from pages_sector import (
     render_sector_monitor,
     render_sector_prediction,
@@ -42,16 +49,24 @@ st.set_page_config(
     layout="wide",
 )
 
-st.title("📈 Real-AI-R — A股量化交易回测平台")
+st.title("📈 Real-AI-R — A股量化交易系统")
 
 # ------------------------------------------------------------------
 # 顶部导航标签页
 # ------------------------------------------------------------------
-tab_backtest, tab_monitor, tab_predict, tab_recommend = st.tabs([
+(
+    tab_backtest, tab_monitor, tab_predict, tab_recommend,
+    tab_classify, tab_cycle, tab_tech, tab_redline, tab_portfolio,
+) = st.tabs([
     "🚀 策略回测",
     "📡 板块监控",
     "🔮 热门板块预测",
     "💎 个股推荐",
+    "🏷️ 板块分类",
+    "🔄 周期轮动",
+    "🚀 科技赛道",
+    "🚫 避雷指南",
+    "⚔️ 攻防组合",
 ])
 
 # ==================================================================
@@ -261,3 +276,33 @@ with tab_predict:
 # ==================================================================
 with tab_recommend:
     render_stock_recommendation()
+
+# ==================================================================
+# Tab 5: 板块宏观分类
+# ==================================================================
+with tab_classify:
+    render_sector_classification()
+
+# ==================================================================
+# Tab 6: 周期轮动仪表盘
+# ==================================================================
+with tab_cycle:
+    render_cycle_dashboard()
+
+# ==================================================================
+# Tab 7: 科技赛道追踪
+# ==================================================================
+with tab_tech:
+    render_tech_tracker()
+
+# ==================================================================
+# Tab 8: 避雷指南
+# ==================================================================
+with tab_redline:
+    render_redline_guide()
+
+# ==================================================================
+# Tab 9: 攻防组合
+# ==================================================================
+with tab_portfolio:
+    render_portfolio()
