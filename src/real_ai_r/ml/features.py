@@ -146,7 +146,9 @@ class FeatureEngineer:
                 if not hist.empty and "close" in hist.columns:
                     closes = hist["close"].values
                     volumes = hist["volume"].values if "volume" in hist.columns else None
-                    feat.update(self._multi_day_features(closes, volumes))
+                    highs = hist["high"].values if "high" in hist.columns else None
+                    lows = hist["low"].values if "low" in hist.columns else None
+                    feat.update(self._multi_day_features(closes, volumes, highs, lows))
 
             # 填充缺失的多日特征
             for f in self.QUANT_FEATURES:
@@ -345,10 +347,18 @@ class FeatureEngineer:
             hot_idx = group[group["next_day_change"] >= threshold].index
             df.loc[hot_idx, "is_hot_next_day"] = 1
 
+        # Re-sort by date so TimeSeriesSplit respects temporal boundaries
+        df = df.sort_values("date").reset_index(drop=True)
+
         return df
 
     @staticmethod
-    def _multi_day_features(closes: np.ndarray, volumes: np.ndarray | None) -> dict:
+    def _multi_day_features(
+        closes: np.ndarray,
+        volumes: np.ndarray | None,
+        highs: np.ndarray | None = None,
+        lows: np.ndarray | None = None,
+    ) -> dict:
         """从历史收盘价序列计算多日特征。"""
         feat: dict = {}
         n = len(closes)
@@ -383,8 +393,11 @@ class FeatureEngineer:
             ma20 = np.mean(closes[-20:])
             feat["ma20_bias"] = float((closes[-1] - ma20) / ma20 * 100) if ma20 > 0 else 0.0
 
-            high_20 = np.max(closes[-20:])
-            low_20 = np.min(closes[-20:])
+            # Use highs/lows if available (matches training path), fall back to closes
+            h_arr = highs[-20:] if highs is not None and len(highs) >= 20 else closes[-20:]
+            l_arr = lows[-20:] if lows is not None and len(lows) >= 20 else closes[-20:]
+            high_20 = np.max(h_arr)
+            low_20 = np.min(l_arr)
             rng = high_20 - low_20
             feat["price_position"] = float((closes[-1] - low_20) / rng) if rng > 0 else 0.5
 
