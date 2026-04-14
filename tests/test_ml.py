@@ -475,3 +475,191 @@ class TestDataCollector:
         """测试 SnapshotCollector 存在。"""
         from real_ai_r.ml.data_collector import SnapshotCollector
         assert hasattr(SnapshotCollector, "collect_today_snapshot")
+
+
+# ======================================================================
+# 模型版本管理测试
+# ======================================================================
+
+class TestModelRegistry:
+    """测试模型版本注册表。"""
+
+    @pytest.fixture()
+    def tmp_registry(self, tmp_path):
+        """创建临时注册表目录。"""
+        from real_ai_r.ml.registry import ModelRegistry
+        return ModelRegistry(registry_dir=tmp_path / "models")
+
+    @pytest.fixture()
+    def trained_model(self):
+        """创建已训练的模型。"""
+        history = _make_multi_board_history(n_boards=5, days=60)
+        engineer = FeatureEngineer()
+        feature_df = engineer.build_features_from_history(history)
+        model = HotBoardModel()
+        model.train(feature_df)
+        return model, feature_df
+
+    def test_registry_init(self, tmp_registry):
+        """测试注册表初始化。"""
+        assert tmp_registry.version_count == 0
+        assert tmp_registry.registry_dir.exists()
+
+    def test_save_model(self, tmp_registry, trained_model):
+        """测试保存模型。"""
+        model, feature_df = trained_model
+        version = tmp_registry.save_model(
+            model=model,
+            board_type="industry",
+            train_days=60,
+            max_boards=5,
+            sample_count=len(feature_df),
+        )
+        assert version.version_id
+        assert version.board_type == "industry"
+        assert version.train_days == 60
+        assert version.sample_count > 0
+        assert version.feature_count == 22
+        assert version.auc >= 0
+        assert tmp_registry.version_count == 1
+
+    def test_list_versions(self, tmp_registry, trained_model):
+        """测试列出版本。"""
+        model, feature_df = trained_model
+        # 保存两个版本
+        v1 = tmp_registry.save_model(
+            model=model, board_type="industry",
+            train_days=60, sample_count=len(feature_df),
+        )
+        v2 = tmp_registry.save_model(
+            model=model, board_type="concept",
+            train_days=30, sample_count=len(feature_df),
+        )
+        all_versions = tmp_registry.list_versions()
+        assert len(all_versions) == 2
+
+        # 按类型筛选
+        industry_versions = tmp_registry.list_versions(board_type="industry")
+        assert len(industry_versions) == 1
+        assert industry_versions[0].version_id == v1.version_id
+
+        concept_versions = tmp_registry.list_versions(board_type="concept")
+        assert len(concept_versions) == 1
+        assert concept_versions[0].version_id == v2.version_id
+
+    def test_load_model(self, tmp_registry, trained_model):
+        """测试加载模型。"""
+        model, feature_df = trained_model
+        version = tmp_registry.save_model(
+            model=model, board_type="industry",
+            train_days=60, sample_count=len(feature_df),
+        )
+        loaded = tmp_registry.load_model(version.version_id)
+        assert loaded is not None
+        assert loaded.is_trained
+        assert loaded.model is not None
+        assert len(loaded.feature_columns) == 22
+
+    def test_load_model_predicts(self, tmp_registry, trained_model):
+        """测试加载的模型可以正常预测。"""
+        model, feature_df = trained_model
+        version = tmp_registry.save_model(
+            model=model, board_type="industry",
+            train_days=60, sample_count=len(feature_df),
+        )
+        loaded = tmp_registry.load_model(version.version_id)
+        # 用最后一天的数据做预测
+        last_date = feature_df["date"].max()
+        snapshot = feature_df[feature_df["date"] == last_date]
+        if not snapshot.empty:
+            predictions = loaded.predict(snapshot)
+            assert isinstance(predictions, list)
+            assert len(predictions) > 0
+
+    def test_get_version(self, tmp_registry, trained_model):
+        """测试获取版本元数据。"""
+        model, feature_df = trained_model
+        version = tmp_registry.save_model(
+            model=model, board_type="industry",
+            train_days=60, sample_count=len(feature_df),
+        )
+        retrieved = tmp_registry.get_version(version.version_id)
+        assert retrieved is not None
+        assert retrieved.version_id == version.version_id
+        assert retrieved.board_type == "industry"
+
+        # 不存在的版本
+        assert tmp_registry.get_version("nonexistent") is None
+
+    def test_delete_version(self, tmp_registry, trained_model):
+        """测试删除版本。"""
+        model, feature_df = trained_model
+        version = tmp_registry.save_model(
+            model=model, board_type="industry",
+            train_days=60, sample_count=len(feature_df),
+        )
+        assert tmp_registry.version_count == 1
+        tmp_registry.delete_version(version.version_id)
+        assert tmp_registry.version_count == 0
+        assert tmp_registry.get_version(version.version_id) is None
+
+    def test_compare_versions(self, tmp_registry, trained_model):
+        """测试版本对比。"""
+        model, feature_df = trained_model
+        v1 = tmp_registry.save_model(
+            model=model, board_type="industry",
+            train_days=60, sample_count=len(feature_df),
+        )
+        v2 = tmp_registry.save_model(
+            model=model, board_type="industry",
+            train_days=30, sample_count=len(feature_df),
+        )
+        comparison = tmp_registry.compare_versions([v1.version_id, v2.version_id])
+        assert len(comparison) == 2
+        assert "版本" in comparison[0]
+        assert "AUC" in comparison[0]
+        assert "F1" in comparison[0]
+
+    def test_load_nonexistent_model(self, tmp_registry):
+        """测试加载不存在的模型。"""
+        result = tmp_registry.load_model("nonexistent_version")
+        assert result is None
+
+    def test_index_persistence(self, tmp_path, trained_model):
+        """测试索引持久化——重建注册表后版本仍在。"""
+        from real_ai_r.ml.registry import ModelRegistry
+        model, feature_df = trained_model
+        reg_dir = tmp_path / "models"
+
+        # 第一个注册表实例保存模型
+        reg1 = ModelRegistry(registry_dir=reg_dir)
+        version = reg1.save_model(
+            model=model, board_type="industry",
+            train_days=60, sample_count=len(feature_df),
+        )
+
+        # 新实例应自动加载索引
+        reg2 = ModelRegistry(registry_dir=reg_dir)
+        assert reg2.version_count == 1
+        assert reg2.get_version(version.version_id) is not None
+
+    def test_version_display_name(self, tmp_registry, trained_model):
+        """测试版本显示名。"""
+        model, feature_df = trained_model
+        version = tmp_registry.save_model(
+            model=model, board_type="industry",
+            train_days=60, sample_count=len(feature_df),
+        )
+        assert "行业" in version.display_name
+        assert "AUC=" in version.display_name
+
+    def test_save_with_note(self, tmp_registry, trained_model):
+        """测试带备注的保存。"""
+        model, feature_df = trained_model
+        version = tmp_registry.save_model(
+            model=model, board_type="industry",
+            train_days=60, sample_count=len(feature_df),
+            note="测试备注",
+        )
+        retrieved = tmp_registry.get_version(version.version_id)
+        assert retrieved.note == "测试备注"

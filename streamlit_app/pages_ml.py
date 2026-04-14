@@ -23,11 +23,110 @@ from real_ai_r.ml.backtest import ModelBacktester
 from real_ai_r.ml.data_collector import BoardHistoryCollector, SnapshotCollector
 from real_ai_r.ml.features import FeatureEngineer
 from real_ai_r.ml.model import HotBoardModel
+from real_ai_r.ml.registry import ModelRegistry
 from real_ai_r.sector.recommender import StockRecommender
 
 # ======================================================================
 # 辅助函数
 # ======================================================================
+
+def _backtest_with_fixed_model(
+    model: HotBoardModel,
+    feature_df: pd.DataFrame,
+    top_n: int,
+):
+    """使用固定模型对历史数据进行回测（不重新训练）。"""
+    from real_ai_r.ml.backtest import BacktestDay, BacktestReport
+
+    if feature_df.empty or "date" not in feature_df.columns:
+        return BacktestReport()
+
+    dates = sorted(feature_df["date"].unique())
+    if len(dates) < 10:
+        return BacktestReport()
+
+    daily_results: list[BacktestDay] = []
+    equity = [1.0]
+
+    for i in range(len(dates) - 1):
+        current_date = dates[i]
+        next_date = dates[i + 1]
+
+        today_data = feature_df[feature_df["date"] == current_date]
+        if today_data.empty:
+            continue
+
+        predictions = model.predict(today_data)
+        predicted_hot = [p.board_name for p in predictions[:top_n]]
+
+        next_data = feature_df[feature_df["date"] == next_date]
+        if next_data.empty:
+            continue
+
+        actual_hot_df = next_data.nlargest(top_n, "momentum_1d")
+        actual_hot = actual_hot_df["board_name"].tolist()
+
+        hit_set = set(predicted_hot) & set(actual_hot)
+        hit_count = len(hit_set)
+        precision = hit_count / len(predicted_hot) if predicted_hot else 0.0
+
+        predicted_returns = next_data[
+            next_data["board_name"].isin(predicted_hot)
+        ]["momentum_1d"]
+        predicted_avg = predicted_returns.mean() if not predicted_returns.empty else 0.0
+        market_avg = next_data["momentum_1d"].mean()
+        excess = predicted_avg - market_avg
+
+        daily_results.append(BacktestDay(
+            date=str(current_date)[:10],
+            predicted_hot=predicted_hot,
+            actual_hot=actual_hot,
+            hit_count=hit_count,
+            precision=precision,
+            predicted_avg_return=round(predicted_avg, 4),
+            market_avg_return=round(market_avg, 4),
+            excess_return=round(excess, 4),
+        ))
+
+        daily_return = predicted_avg / 100
+        equity.append(equity[-1] * (1 + daily_return))
+
+    if not daily_results:
+        return BacktestReport()
+
+    import numpy as np
+    precisions = [d.precision for d in daily_results]
+    excess_returns = [d.excess_return for d in daily_results]
+    win_days = sum(1 for e in excess_returns if e > 0)
+
+    peak = equity[0]
+    max_dd = 0.0
+    for val in equity:
+        if val > peak:
+            peak = val
+        dd = (peak - val) / peak
+        if dd > max_dd:
+            max_dd = dd
+
+    daily_rets = np.diff(equity) / np.array(equity[:-1])
+    sharpe = 0.0
+    if len(daily_rets) > 1 and np.std(daily_rets) > 0:
+        sharpe = float(np.mean(daily_rets) / np.std(daily_rets) * np.sqrt(252))
+
+    return BacktestReport(
+        total_days=len(daily_results),
+        avg_precision=float(np.mean(precisions)),
+        avg_hit_rate=float(np.mean(precisions)),
+        avg_excess_return=float(np.mean(excess_returns)),
+        cumulative_return=float((equity[-1] / equity[0] - 1) * 100),
+        max_drawdown=float(max_dd * 100),
+        sharpe_ratio=round(sharpe, 2),
+        win_rate=win_days / len(daily_results) if daily_results else 0.0,
+        model_metrics=model.metrics,
+        daily_results=daily_results,
+        equity_curve=equity,
+    )
+
 
 def _train_and_predict(board_type: str, top_n: int, train_days: int, max_boards: int):
     """训练模型并预测热门板块。"""
@@ -166,11 +265,28 @@ def render_ml_prediction() -> None:
                 predictions = model.predict(snapshot_features)
                 top_predictions = predictions[:top_n]
 
+                progress.progress(95, text="💾 保存模型版本...")
+                registry = ModelRegistry()
+                saved_version = registry.save_model(
+                    model=model,
+                    board_type=bt,
+                    train_days=train_days,
+                    max_boards=max_boards or 0,
+                    sample_count=len(feature_df),
+                )
+
                 progress.progress(100, text="✅ 预测完成！")
 
             except Exception as e:
                 st.error(f"预测失败: {e}")
                 return
+
+        # ---- 模型版本信息 ----
+        if saved_version:
+            st.success(
+                f"💾 模型已保存为版本 **{saved_version.version_id}** "
+                f"（可在「📦 模型管理」标签页查看所有版本）"
+            )
 
         # ---- 模型评估指标 ----
         st.markdown("### 📊 模型评估")
@@ -639,7 +755,7 @@ def render_model_backtest() -> None:
     st.markdown("## 📈 模型回测验证")
     st.info(
         "**滚动窗口回测**：模拟真实使用场景，每天用过去 N 天数据训练，预测次日热门板块\n\n"
-        "评估模型的命中率、超额收益和稳定性"
+        "评估模型的命中率、超额收益和稳定性。支持选择已有模型版本进行回测。"
     )
 
     col1, col2, col3 = st.columns(3)
@@ -655,18 +771,45 @@ def render_model_backtest() -> None:
     with col3:
         top_n = st.slider("每日预测板块数", 5, 20, 10, key="bt_top_n")
 
+    # 模型版本选择
+    bt_type = "industry" if board_type == "行业板块" else "concept"
+    registry = ModelRegistry()
+    versions = registry.list_versions(board_type=bt_type)
+
+    model_options = ["🔄 重新训练（滚动窗口）"]
+    version_map: dict[str, str] = {}
+    for v in versions:
+        label = (
+            f"📦 {v.version_id} | AUC={v.auc:.4f} | "
+            f"训练{v.train_days}天 | {v.sample_count}样本"
+        )
+        model_options.append(label)
+        version_map[label] = v.version_id
+
+    selected_model = st.selectbox(
+        "选择模型",
+        model_options,
+        key="bt_model_select",
+        help="选择已保存的模型版本进行回测，或重新训练",
+    )
+
+    use_saved_model = selected_model != "🔄 重新训练（滚动窗口）"
+
     with st.expander("⚙️ 高级设置", expanded=False):
         total_days = st.slider("回测总天数", 40, 120, 60, key="bt_total_days")
         max_boards = st.slider(
             "采集板块数（0=全部）", 0, 100, 30, key="bt_max_boards",
         )
-        retrain_every = st.slider("重训间隔(天)", 1, 10, 5, key="bt_retrain")
+        if not use_saved_model:
+            retrain_every = st.slider("重训间隔(天)", 1, 10, 5, key="bt_retrain")
+        else:
+            retrain_every = 5
         st.caption("⚠️ 回测需要大量数据采集，可能需要 3-10 分钟")
 
     backtest_btn = st.button("📊 开始回测", type="primary", key="bt_run_btn")
 
     if backtest_btn:
-        bt = "industry" if board_type == "行业板块" else "concept"
+        bt = bt_type
 
         with st.spinner("📊 正在执行模型回测..."):
             try:
@@ -691,13 +834,25 @@ def render_model_backtest() -> None:
                     return
 
                 # 执行回测
-                st.text("📊 滚动窗口回测...")
-                backtester = ModelBacktester(
-                    train_window=train_window,
-                    top_n=top_n,
-                    retrain_every=retrain_every,
-                )
-                report = backtester.run(feature_df)
+                st.text("📊 回测中...")
+                if use_saved_model:
+                    # 使用已保存的模型进行固定模型回测
+                    version_id = version_map[selected_model]
+                    loaded_model = registry.load_model(version_id)
+                    if loaded_model is None:
+                        st.error(f"模型加载失败: {version_id}")
+                        return
+                    st.text(f"📦 使用已保存模型 {version_id} 进行回测...")
+                    report = _backtest_with_fixed_model(
+                        loaded_model, feature_df, top_n,
+                    )
+                else:
+                    backtester = ModelBacktester(
+                        train_window=train_window,
+                        top_n=top_n,
+                        retrain_every=retrain_every,
+                    )
+                    report = backtester.run(feature_df)
 
             except Exception as e:
                 st.error(f"回测失败: {e}")
@@ -772,3 +927,192 @@ def render_model_backtest() -> None:
             # 详细数据表
             st.markdown("### 📋 每日回测明细")
             st.dataframe(daily_df, use_container_width=True, hide_index=True, height=300)
+
+
+# ======================================================================
+# 5. 模型版本管理
+# ======================================================================
+
+def render_model_management() -> None:
+    """渲染模型版本管理页面。"""
+    st.markdown("## 📦 模型版本管理")
+    st.info(
+        "**模型注册表**：管理所有已训练的 LightGBM 模型版本\n\n"
+        "查看版本详情、对比模型性能、加载已有模型进行预测、删除旧版本"
+    )
+
+    registry = ModelRegistry()
+
+    # ---- 版本概览 ----
+    all_versions = registry.list_versions()
+
+    if not all_versions:
+        st.warning(
+            "暂无已保存的模型版本。请先到「🧠 ML板块预测」标签页训练并保存模型。"
+        )
+        return
+
+    st.markdown(f"### 📋 已保存 {len(all_versions)} 个模型版本")
+
+    # 筛选
+    col_filter, col_sort = st.columns(2)
+    with col_filter:
+        filter_type = st.radio(
+            "筛选板块类型",
+            ["全部", "行业板块", "概念板块"],
+            horizontal=True,
+            key="mgmt_filter_type",
+        )
+    with col_sort:
+        sort_by = st.radio(
+            "排序方式",
+            ["创建时间", "AUC", "F1"],
+            horizontal=True,
+            key="mgmt_sort",
+        )
+
+    filtered = all_versions
+    if filter_type == "行业板块":
+        filtered = [v for v in filtered if v.board_type == "industry"]
+    elif filter_type == "概念板块":
+        filtered = [v for v in filtered if v.board_type == "concept"]
+
+    if sort_by == "AUC":
+        filtered = sorted(filtered, key=lambda v: v.auc, reverse=True)
+    elif sort_by == "F1":
+        filtered = sorted(filtered, key=lambda v: v.f1, reverse=True)
+
+    # 版本列表表格
+    rows = []
+    for v in filtered:
+        bt_display = "行业" if v.board_type == "industry" else "概念"
+        rows.append({
+            "版本ID": v.version_id,
+            "创建时间": v.created_at[:19].replace("T", " "),
+            "板块类型": bt_display,
+            "训练天数": v.train_days,
+            "样本数": v.sample_count,
+            "特征数": v.feature_count,
+            "AUC": round(v.auc, 4),
+            "F1": round(v.f1, 4),
+            "精确率": round(v.precision, 4),
+            "召回率": round(v.recall, 4),
+            "备注": v.note,
+        })
+
+    if rows:
+        versions_df = pd.DataFrame(rows)
+        st.dataframe(versions_df, use_container_width=True, hide_index=True)
+
+    # ---- 版本对比 ----
+    if len(filtered) >= 2:
+        st.markdown("### 📊 版本性能对比")
+        compare_options = [v.version_id for v in filtered]
+        selected_ids = st.multiselect(
+            "选择要对比的版本（至少2个）",
+            compare_options,
+            default=compare_options[:min(3, len(compare_options))],
+            key="mgmt_compare",
+        )
+
+        if len(selected_ids) >= 2:
+            compare_data = registry.compare_versions(selected_ids)
+            compare_df = pd.DataFrame(compare_data)
+            st.dataframe(compare_df, use_container_width=True, hide_index=True)
+
+            # AUC 对比柱状图
+            fig_compare = px.bar(
+                compare_df, x="版本", y=["AUC", "F1", "精确率", "召回率"],
+                barmode="group",
+                title="模型版本性能对比",
+                color_discrete_sequence=["#FF6B6B", "#4ECDC4", "#FFB347", "#87CEEB"],
+            )
+            fig_compare.update_layout(height=400, margin=dict(t=40, b=30))
+            st.plotly_chart(fig_compare, use_container_width=True)
+
+    # ---- 版本详情与操作 ----
+    st.markdown("### 🔍 版本详情与操作")
+    version_labels = {
+        v.version_id: (
+            f"{v.version_id} | "
+            f"{'行业' if v.board_type == 'industry' else '概念'} | "
+            f"AUC={v.auc:.4f}"
+        )
+        for v in filtered
+    }
+    selected_version = st.selectbox(
+        "选择版本查看详情",
+        list(version_labels.keys()),
+        format_func=lambda x: version_labels.get(x, x),
+        key="mgmt_detail_select",
+    )
+
+    if selected_version:
+        v = registry.get_version(selected_version)
+        if v:
+            col_detail1, col_detail2 = st.columns(2)
+            with col_detail1:
+                st.markdown("**基本信息**")
+                st.write(f"- 版本ID: `{v.version_id}`")
+                st.write(f"- 创建时间: {v.created_at[:19].replace('T', ' ')}")
+                bt_display = "行业板块" if v.board_type == "industry" else "概念板块"
+                st.write(f"- 板块类型: {bt_display}")
+                st.write(f"- 训练天数: {v.train_days}")
+                st.write(f"- 采集板块数: {v.max_boards}")
+                st.write(f"- 样本数: {v.sample_count}")
+                st.write(f"- 特征维度: {v.feature_count}")
+            with col_detail2:
+                st.markdown("**性能指标**")
+                st.write(f"- AUC: **{v.auc:.4f}**")
+                st.write(f"- F1: **{v.f1:.4f}**")
+                st.write(f"- 精确率: **{v.precision:.4f}**")
+                st.write(f"- 召回率: **{v.recall:.4f}**")
+                st.write(f"- 准确率: **{v.accuracy:.4f}**")
+
+            # 模型参数
+            if v.params:
+                with st.expander("⚙️ 模型参数", expanded=False):
+                    params_df = pd.DataFrame(
+                        [{"参数": k, "值": str(val)} for k, val in v.params.items()],
+                    )
+                    st.dataframe(params_df, use_container_width=True, hide_index=True)
+
+            # 特征列表
+            if v.feature_columns:
+                with st.expander(f"📋 特征列表 ({v.feature_count}个)", expanded=False):
+                    name_map = {
+                        "momentum_1d": "1日动量", "momentum_3d": "3日动量",
+                        "momentum_5d": "5日动量", "momentum_10d": "10日动量",
+                        "volatility_5d": "5日波动率", "volatility_10d": "10日波动率",
+                        "volume_ratio_5d": "量比(5日)", "turnover_rate": "换手率",
+                        "amplitude": "振幅", "ma5_bias": "MA5偏离",
+                        "ma10_bias": "MA10偏离", "ma20_bias": "MA20偏离",
+                        "rsi_14": "RSI(14)", "price_position": "价格位置",
+                        "is_tech": "科技主线", "is_cycle": "周期主线",
+                        "is_redline": "红线禁区", "cycle_stage": "周期阶段",
+                        "market_momentum": "大盘动量", "market_breadth": "市场广度",
+                        "net_inflow_rank": "资金排名", "rise_ratio": "上涨占比",
+                    }
+                    feat_rows = [
+                        {"特征": f, "中文名": name_map.get(f, f)}
+                        for f in v.feature_columns
+                    ]
+                    st.dataframe(
+                        pd.DataFrame(feat_rows),
+                        use_container_width=True, hide_index=True,
+                    )
+
+            # 删除操作
+            st.markdown("---")
+            col_del, col_confirm = st.columns([3, 1])
+            with col_del:
+                st.caption("⚠️ 删除操作不可恢复")
+            with col_confirm:
+                if st.button(
+                    f"🗑️ 删除 {selected_version}",
+                    type="secondary",
+                    key=f"del_{selected_version}",
+                ):
+                    registry.delete_version(selected_version)
+                    st.success(f"已删除版本 {selected_version}")
+                    st.rerun()

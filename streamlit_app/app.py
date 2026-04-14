@@ -26,6 +26,7 @@ from pages_ml import (
     render_daily_hot_boards,
     render_ml_prediction,
     render_model_backtest,
+    render_model_management,
 )
 from pages_sector import (
     render_sector_monitor,
@@ -62,7 +63,7 @@ st.title("📈 Real-AI-R — A股量化交易系统")
 # ------------------------------------------------------------------
 (
     tab_backtest, tab_monitor, tab_ml_predict, tab_daily_hot,
-    tab_linkage, tab_model_bt,
+    tab_linkage, tab_model_bt, tab_model_mgmt,
     tab_predict, tab_recommend,
     tab_classify, tab_cycle, tab_tech, tab_redline, tab_portfolio,
 ) = st.tabs([
@@ -72,6 +73,7 @@ st.title("📈 Real-AI-R — A股量化交易系统")
     "💎 日热门板块",
     "🔗 板块联动",
     "📈 模型回测",
+    "📦 模型管理",
     "🔮 五因子预测",
     "📊 个股推荐",
     "🏷️ 板块分类",
@@ -302,7 +304,13 @@ with tab_model_bt:
     render_model_backtest()
 
 # ==================================================================
-# Tab 7: 五因子预测（原热门板块预测）
+# Tab 7: 模型版本管理（新）
+# ==================================================================
+with tab_model_mgmt:
+    render_model_management()
+
+# ==================================================================
+# Tab 8: 五因子预测（原热门板块预测）
 # ==================================================================
 with tab_predict:
     render_sector_prediction()
