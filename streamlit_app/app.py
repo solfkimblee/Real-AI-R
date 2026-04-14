@@ -21,6 +21,12 @@ from pages_macro import (
     render_sector_classification,
     render_tech_tracker,
 )
+from pages_ml import (
+    render_board_linkage,
+    render_daily_hot_boards,
+    render_ml_prediction,
+    render_model_backtest,
+)
 from pages_sector import (
     render_sector_monitor,
     render_sector_prediction,
@@ -55,13 +61,19 @@ st.title("📈 Real-AI-R — A股量化交易系统")
 # 顶部导航标签页
 # ------------------------------------------------------------------
 (
-    tab_backtest, tab_monitor, tab_predict, tab_recommend,
+    tab_backtest, tab_monitor, tab_ml_predict, tab_daily_hot,
+    tab_linkage, tab_model_bt,
+    tab_predict, tab_recommend,
     tab_classify, tab_cycle, tab_tech, tab_redline, tab_portfolio,
 ) = st.tabs([
     "🚀 策略回测",
     "📡 板块监控",
-    "🔮 热门板块预测",
-    "💎 个股推荐",
+    "🧠 ML板块预测",
+    "💎 日热门板块",
+    "🔗 板块联动",
+    "📈 模型回测",
+    "🔮 五因子预测",
+    "📊 个股推荐",
     "🏷️ 板块分类",
     "🔄 周期轮动",
     "🚀 科技赛道",
@@ -266,13 +278,37 @@ with tab_monitor:
     render_sector_monitor()
 
 # ==================================================================
-# Tab 3: 热门板块预测
+# Tab 3: ML 融合板块预测（新）
+# ==================================================================
+with tab_ml_predict:
+    render_ml_prediction()
+
+# ==================================================================
+# Tab 4: 日热门板块（新，升级版个股推荐）
+# ==================================================================
+with tab_daily_hot:
+    render_daily_hot_boards()
+
+# ==================================================================
+# Tab 5: 板块联动分析（新）
+# ==================================================================
+with tab_linkage:
+    render_board_linkage()
+
+# ==================================================================
+# Tab 6: 模型回测（新）
+# ==================================================================
+with tab_model_bt:
+    render_model_backtest()
+
+# ==================================================================
+# Tab 7: 五因子预测（原热门板块预测）
 # ==================================================================
 with tab_predict:
     render_sector_prediction()
 
 # ==================================================================
-# Tab 4: 个股推荐
+# Tab 8: 个股推荐（原版）
 # ==================================================================
 with tab_recommend:
     render_stock_recommendation()
