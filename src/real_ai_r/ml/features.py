@@ -34,16 +34,22 @@ class FeatureEngineer:
         "momentum_3d",      # 3日累计涨跌幅
         "momentum_5d",      # 5日累计涨跌幅
         "momentum_10d",     # 10日累计涨跌幅
+        "momentum_20d",     # 20日累计涨跌幅（周线级别动量）
+        "momentum_60d",     # 60日累计涨跌幅（月线级别动量）
         "volatility_5d",    # 5日波动率
         "volatility_10d",   # 10日波动率
+        "volatility_20d",   # 20日波动率（周线级别波动）
         "volume_ratio_5d",  # 成交量/5日均量
         "turnover_rate",    # 换手率
         "amplitude",        # 振幅
         "ma5_bias",         # 收盘价偏离MA5的百分比
         "ma10_bias",        # 收盘价偏离MA10的百分比
         "ma20_bias",        # 收盘价偏离MA20的百分比
+        "ma60_bias",        # 收盘价偏离MA60的百分比（月线偏离）
         "rsi_14",           # 14日RSI
         "price_position",   # 价格在20日高低点中的位置 (0-1)
+        "weekly_trend",     # 周线趋势强度（MA5/MA20比值）
+        "monthly_trend",    # 月线趋势强度（MA20/MA60比值）
     ]
 
     # 宏观特征列表
@@ -63,6 +69,9 @@ class FeatureEngineer:
     ]
 
     ALL_FEATURES = QUANT_FEATURES + MACRO_FEATURES + MARKET_FEATURES
+
+    # Minimum data points required to compute all features
+    MIN_HISTORY_DAYS = 60
 
     def __init__(self) -> None:
         self.classifier = SectorClassifier()
@@ -192,7 +201,7 @@ class FeatureEngineer:
         board_df: pd.DataFrame,
     ) -> pd.DataFrame:
         """计算单个板块的时序特征。"""
-        if len(board_df) < 20:
+        if len(board_df) < self.MIN_HISTORY_DAYS:
             return pd.DataFrame()
 
         records = []
@@ -217,7 +226,7 @@ class FeatureEngineer:
         is_redline = 1 if label.category == "redline" else 0
         cycle_stage = self._get_cycle_stage(label)
 
-        for i in range(20, len(board_df)):
+        for i in range(self.MIN_HISTORY_DAYS, len(board_df)):
             feat: dict = {
                 "date": board_df.iloc[i]["date"],
                 "board_name": board_name,
@@ -239,14 +248,24 @@ class FeatureEngineer:
                 float(np.sum(changes[i - 9:i + 1]))
                 if changes is not None else 0.0
             )
+            feat["momentum_20d"] = (
+                float(np.sum(changes[i - 19:i + 1]))
+                if changes is not None else 0.0
+            )
+            feat["momentum_60d"] = (
+                float(np.sum(changes[max(0, i - 59):i + 1]))
+                if changes is not None else 0.0
+            )
 
             # 波动率
             if changes is not None:
                 feat["volatility_5d"] = float(np.std(changes[i - 4:i + 1]))
                 feat["volatility_10d"] = float(np.std(changes[i - 9:i + 1]))
+                feat["volatility_20d"] = float(np.std(changes[i - 19:i + 1]))
             else:
                 feat["volatility_5d"] = 0.0
                 feat["volatility_10d"] = 0.0
+                feat["volatility_20d"] = 0.0
 
             # 量比
             if volumes is not None:
@@ -269,6 +288,12 @@ class FeatureEngineer:
             feat["ma5_bias"] = float((c - ma5) / ma5 * 100) if ma5 > 0 else 0.0
             feat["ma10_bias"] = float((c - ma10) / ma10 * 100) if ma10 > 0 else 0.0
             feat["ma20_bias"] = float((c - ma20) / ma20 * 100) if ma20 > 0 else 0.0
+            ma60 = np.mean(closes[max(0, i - 59):i + 1])
+            feat["ma60_bias"] = float((c - ma60) / ma60 * 100) if ma60 > 0 else 0.0
+
+            # 周线/月线趋势强度
+            feat["weekly_trend"] = float(ma5 / ma20) if ma20 > 0 else 1.0
+            feat["monthly_trend"] = float(ma20 / ma60) if ma60 > 0 else 1.0
 
             # RSI-14
             if changes is not None and i >= 14:
@@ -371,6 +396,10 @@ class FeatureEngineer:
             feat["momentum_5d"] = float(np.sum(daily_changes[-5:]))
         if n >= 11:
             feat["momentum_10d"] = float(np.sum(daily_changes[-10:]))
+        if n >= 21:
+            feat["momentum_20d"] = float(np.sum(daily_changes[-20:]))
+        if n >= 61:
+            feat["momentum_60d"] = float(np.sum(daily_changes[-60:]))
 
         if n >= 6:
             returns = np.diff(closes[-6:]) / closes[-6:-1] * 100
@@ -378,6 +407,9 @@ class FeatureEngineer:
         if n >= 11:
             returns = np.diff(closes[-11:]) / closes[-11:-1] * 100
             feat["volatility_10d"] = float(np.std(returns))
+        if n >= 21:
+            returns = np.diff(closes[-21:]) / closes[-21:-1] * 100
+            feat["volatility_20d"] = float(np.std(returns))
 
         if volumes is not None and n >= 5:
             avg_vol = np.mean(volumes[-6:-1])
@@ -392,7 +424,21 @@ class FeatureEngineer:
         if n >= 20:
             ma20 = np.mean(closes[-20:])
             feat["ma20_bias"] = float((closes[-1] - ma20) / ma20 * 100) if ma20 > 0 else 0.0
+        if n >= 60:
+            ma60 = np.mean(closes[-60:])
+            feat["ma60_bias"] = float((closes[-1] - ma60) / ma60 * 100) if ma60 > 0 else 0.0
 
+        # 周线/月线趋势强度
+        if n >= 20:
+            ma5_val = np.mean(closes[-5:]) if n >= 5 else closes[-1]
+            ma20_val = np.mean(closes[-20:])
+            feat["weekly_trend"] = float(ma5_val / ma20_val) if ma20_val > 0 else 1.0
+        if n >= 60:
+            ma20_val = np.mean(closes[-20:]) if n >= 20 else closes[-1]
+            ma60_val = np.mean(closes[-60:])
+            feat["monthly_trend"] = float(ma20_val / ma60_val) if ma60_val > 0 else 1.0
+
+        if n >= 20:
             # Use highs/lows if available (matches training path), fall back to closes
             h_arr = highs[-20:] if highs is not None and len(highs) >= 20 else closes[-20:]
             l_arr = lows[-20:] if lows is not None and len(lows) >= 20 else closes[-20:]

@@ -14,6 +14,7 @@ import streamlit as st
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
 import pandas as pd
+from pages_catalyst import render_catalyst_tracker, render_investment_checklist
 from pages_macro import (
     render_cycle_dashboard,
     render_portfolio,
@@ -65,6 +66,7 @@ st.title("📈 Real-AI-R — A股量化交易系统")
     tab_backtest, tab_monitor, tab_ml_predict, tab_daily_hot,
     tab_linkage, tab_model_bt, tab_model_mgmt,
     tab_predict, tab_recommend,
+    tab_catalyst, tab_checklist,
     tab_classify, tab_cycle, tab_tech, tab_redline, tab_portfolio,
 ) = st.tabs([
     "🚀 策略回测",
@@ -76,6 +78,8 @@ st.title("📈 Real-AI-R — A股量化交易系统")
     "📦 模型管理",
     "🔮 五因子预测",
     "📊 个股推荐",
+    "📅 催化剂追踪",
+    "📝 投资检查清单",
     "🏷️ 板块分类",
     "🔄 周期轮动",
     "🚀 科技赛道",
@@ -322,7 +326,19 @@ with tab_recommend:
     render_stock_recommendation()
 
 # ==================================================================
-# Tab 5: 板块宏观分类
+# Tab 10: 催化剂追踪（新）
+# ==================================================================
+with tab_catalyst:
+    render_catalyst_tracker()
+
+# ==================================================================
+# Tab 11: 投资决策检查清单（新）
+# ==================================================================
+with tab_checklist:
+    render_investment_checklist()
+
+# ==================================================================
+# Tab 12: 板块宏观分类
 # ==================================================================
 with tab_classify:
     render_sector_classification()

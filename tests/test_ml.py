@@ -92,14 +92,14 @@ class TestFeatureEngineer:
     def test_init(self):
         """测试初始化。"""
         engineer = FeatureEngineer()
-        assert len(engineer.QUANT_FEATURES) == 14
+        assert len(engineer.QUANT_FEATURES) == 20
         assert len(engineer.MACRO_FEATURES) == 4
         assert len(engineer.MARKET_FEATURES) == 4
-        assert len(engineer.ALL_FEATURES) == 22
+        assert len(engineer.ALL_FEATURES) == 28
 
     def test_build_features_from_history(self):
         """测试从历史数据构建特征。"""
-        history = _make_multi_board_history(n_boards=5, days=40)
+        history = _make_multi_board_history(n_boards=5, days=80)
         engineer = FeatureEngineer()
         features = engineer.build_features_from_history(history)
 
@@ -179,7 +179,7 @@ class TestFeatureEngineer:
 
     def test_target_generation(self):
         """测试预测目标生成。"""
-        history = _make_multi_board_history(n_boards=5, days=40)
+        history = _make_multi_board_history(n_boards=5, days=80)
         engineer = FeatureEngineer()
         features = engineer.build_features_from_history(history)
 
@@ -220,7 +220,7 @@ class TestHotBoardModel:
 
     def _get_training_data(self) -> pd.DataFrame:
         """获取训练数据。"""
-        history = _make_multi_board_history(n_boards=8, days=50)
+        history = _make_multi_board_history(n_boards=8, days=80)
         engineer = FeatureEngineer()
         return engineer.build_features_from_history(history)
 
@@ -368,7 +368,7 @@ class TestModelBacktester:
 
     def _get_feature_data(self) -> pd.DataFrame:
         """获取回测用特征数据。"""
-        history = _make_multi_board_history(n_boards=8, days=50)
+        history = _make_multi_board_history(n_boards=8, days=80)
         engineer = FeatureEngineer()
         return engineer.build_features_from_history(history)
 
@@ -493,7 +493,7 @@ class TestModelRegistry:
     @pytest.fixture()
     def trained_model(self):
         """创建已训练的模型。"""
-        history = _make_multi_board_history(n_boards=5, days=60)
+        history = _make_multi_board_history(n_boards=5, days=80)
         engineer = FeatureEngineer()
         feature_df = engineer.build_features_from_history(history)
         model = HotBoardModel()
@@ -519,7 +519,7 @@ class TestModelRegistry:
         assert version.board_type == "industry"
         assert version.train_days == 60
         assert version.sample_count > 0
-        assert version.feature_count == 22
+        assert version.feature_count == 28
         assert version.auc >= 0
         assert tmp_registry.version_count == 1
 
@@ -558,7 +558,7 @@ class TestModelRegistry:
         assert loaded is not None
         assert loaded.is_trained
         assert loaded.model is not None
-        assert len(loaded.feature_columns) == 22
+        assert len(loaded.feature_columns) == 28
 
     def test_load_model_predicts(self, tmp_registry, trained_model):
         """测试加载的模型可以正常预测。"""

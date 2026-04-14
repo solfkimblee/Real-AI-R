@@ -273,7 +273,7 @@ def render_stock_recommendation() -> None:
     else:
         selected_board = st.text_input("输入板块名称", key="rec_board_input")
 
-    col_n, col_sort, col_btn = st.columns([1, 1, 1])
+    col_n, col_sort, col_fund, col_btn = st.columns([1, 1, 1, 1])
     with col_n:
         top_n = st.slider("推荐数量", 5, 30, 10, key="rec_top_n")
     with col_sort:
@@ -281,6 +281,13 @@ def render_stock_recommendation() -> None:
             "排序方式",
             ["综合评分", "涨幅", "换手率", "成交额"],
             key="rec_sort",
+        )
+    with col_fund:
+        include_fundamental = st.checkbox(
+            "加入基本面因子",
+            value=False,
+            key="rec_fundamental",
+            help="开启后加入 PE/PB/营收增长 等基本面数据，评分更全面但速度较慢",
         )
     with col_btn:
         st.markdown("<br>", unsafe_allow_html=True)
@@ -293,14 +300,27 @@ def render_stock_recommendation() -> None:
         "成交额": "amount",
     }
 
+    if include_fundamental:
+        st.info(
+            "📊 **基本面因子已开启** — 评分权重：涨幅20% + 换手率15% + 成交额15% "
+            "+ PE估值15% + PB估值10% + 营收增长率25%\n\n"
+            "⏱️ 需额外获取财务数据，速度较慢（约30秒）"
+        )
+
     if rec_btn and selected_board:
-        with st.spinner(f"💎 正在分析 [{selected_board}] 板块个股..."):
+        spinner_msg = (
+            f"💎 正在分析 [{selected_board}] 板块个股（含基本面数据）..."
+            if include_fundamental
+            else f"💎 正在分析 [{selected_board}] 板块个股..."
+        )
+        with st.spinner(spinner_msg):
             try:
                 result = StockRecommender.recommend(
                     board_name=selected_board,
                     board_type=bt,
                     top_n=top_n,
                     sort_by=sort_map[sort_by],
+                    include_fundamental=include_fundamental,
                 )
             except Exception as e:
                 st.error(f"获取失败: {e}")
@@ -360,6 +380,7 @@ def render_stock_recommendation() -> None:
             "code": "代码", "name": "名称", "price": "最新价",
             "change_pct": "涨跌幅%", "turnover_rate": "换手率%",
             "amount": "成交额", "pe_dynamic": "市盈率(动态)",
+            "pb": "市净率", "revenue_growth": "营收增长率%",
             "composite_score": "综合评分",
         }
         avail = {k: v for k, v in col_labels.items() if k in display.columns}
