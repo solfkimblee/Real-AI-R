@@ -111,7 +111,8 @@ class DataFetcher:
         end_date = end_date.replace("-", "")
 
         logger.info("获取指数行情: %s", symbol)
-        df = ak.stock_zh_index_daily_em(symbol=f"sh{symbol}")
+        prefix = "sz" if symbol.startswith("399") else "sh"
+        df = ak.stock_zh_index_daily_em(symbol=f"{prefix}{symbol}")
 
         df["date"] = pd.to_datetime(df["date"])
         mask = (df["date"] >= pd.to_datetime(start_date)) & (

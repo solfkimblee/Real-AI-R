@@ -210,6 +210,9 @@ class BacktestEngine:
             commission = max(amount * self.commission_rate, self.min_commission)
             total_cost = amount + commission
 
+        if total_cost > self._cash:
+            return
+
         self._cash -= total_cost
         self._position = max_shares
         self._can_sell = False  # T+1: 当天买入不能卖
