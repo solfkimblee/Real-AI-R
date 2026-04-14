@@ -248,7 +248,7 @@ class FeatureEngineer:
 
             # 量比
             if volumes is not None:
-                avg_vol_5 = np.mean(volumes[i - 4:i])
+                avg_vol_5 = np.mean(volumes[i - 5:i])
                 feat["volume_ratio_5d"] = (
                     float(volumes[i] / avg_vol_5) if avg_vol_5 > 0 else 1.0
                 )
@@ -353,12 +353,14 @@ class FeatureEngineer:
         feat: dict = {}
         n = len(closes)
 
+        # Use arithmetic sum of daily returns to match training path
+        daily_changes = np.diff(closes) / closes[:-1] * 100 if n >= 2 else np.array([])
         if n >= 3:
-            feat["momentum_3d"] = float((closes[-1] / closes[-3] - 1) * 100)
+            feat["momentum_3d"] = float(np.sum(daily_changes[-3:]))
         if n >= 5:
-            feat["momentum_5d"] = float((closes[-1] / closes[-5] - 1) * 100)
+            feat["momentum_5d"] = float(np.sum(daily_changes[-5:]))
         if n >= 10:
-            feat["momentum_10d"] = float((closes[-1] / closes[-10] - 1) * 100)
+            feat["momentum_10d"] = float(np.sum(daily_changes[-10:]))
 
         if n >= 5:
             returns = np.diff(closes[-5:]) / closes[-5:-1] * 100

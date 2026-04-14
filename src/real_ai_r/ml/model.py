@@ -126,6 +126,7 @@ class HotBoardModel:
         tscv = TimeSeriesSplit(n_splits=3)
         oof_preds = np.zeros(len(X))
         oof_proba = np.zeros(len(X))
+        val_seen = np.zeros(len(X), dtype=bool)
         models = []
 
         for fold, (train_idx, val_idx) in enumerate(tscv.split(X)):
@@ -143,6 +144,7 @@ class HotBoardModel:
 
             oof_preds[val_idx] = val_pred
             oof_proba[val_idx] = val_proba
+            val_seen[val_idx] = True
             models.append(model)
 
             fold_auc = roc_auc_score(y_val, val_proba) if len(set(y_val)) > 1 else 0
@@ -153,7 +155,7 @@ class HotBoardModel:
         self.is_trained = True
 
         # 计算 OOF 指标（仅统计被验证过的样本）
-        val_mask = oof_proba > 0
+        val_mask = val_seen
         if val_mask.any():
             y_val_all = y[val_mask]
             pred_val_all = oof_preds[val_mask].astype(int)
