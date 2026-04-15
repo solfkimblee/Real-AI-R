@@ -176,6 +176,10 @@ class ZepingMacroStrategyV11:
         top_n : int
             返回前 N 个推荐板块。
         """
+        # Step 0: 确保board_df可用（V1内部可能自动获取，但V1.1需要传递给反转保护）
+        if board_df is None:
+            board_df = self.v1_strategy._fetch_board_data()
+
         # Step 1: 运行V1获取原始结果
         v1_result = self.v1_strategy.predict(
             board_df=board_df, top_n=top_n,

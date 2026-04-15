@@ -328,7 +328,7 @@ class EMRealtimeEnhancer:
             return exact.iloc[0]
 
         # 包含匹配
-        contains = em_df[names.str.contains(ths_name, na=False)]
+        contains = em_df[names.str.contains(ths_name, na=False, regex=False)]
         if not contains.empty:
             return contains.iloc[0]
 
