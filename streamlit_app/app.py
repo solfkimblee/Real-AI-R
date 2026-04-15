@@ -21,6 +21,7 @@ from pages_macro import (
     render_redline_guide,
     render_sector_classification,
     render_tech_tracker,
+    render_zeping_strategy,
 )
 from pages_ml import (
     render_board_linkage,
@@ -63,12 +64,13 @@ st.title("📈 Real-AI-R — A股量化交易系统")
 # 顶部导航标签页
 # ------------------------------------------------------------------
 (
-    tab_backtest, tab_monitor, tab_ml_predict, tab_daily_hot,
+    tab_zeping, tab_backtest, tab_monitor, tab_ml_predict, tab_daily_hot,
     tab_linkage, tab_model_bt, tab_model_mgmt,
     tab_predict, tab_recommend,
     tab_catalyst, tab_checklist,
     tab_classify, tab_cycle, tab_tech, tab_redline, tab_portfolio,
 ) = st.tabs([
+    "🧭 泽平宏观",
     "🚀 策略回测",
     "📡 板块监控",
     "🧠 ML板块预测",
@@ -86,6 +88,12 @@ st.title("📈 Real-AI-R — A股量化交易系统")
     "🚫 避雷指南",
     "⚔️ 攻防组合",
 ])
+
+# ==================================================================
+# Tab 0: 泽平宏观策略（新）
+# ==================================================================
+with tab_zeping:
+    render_zeping_strategy()
 
 # ==================================================================
 # Tab 1: 策略回测（原有功能）
