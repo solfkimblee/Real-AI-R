@@ -70,12 +70,12 @@ class V8Params:
 
     # ---- 连续得分融合 ----
     # regime_score > 0 时科技占优，< 0 时周期占优
-    # cycle_bonus_per_pct: 每1%的制度偏离给周期板块加多少分
-    # 例如：制度差-3% → 周期板块加 3 × 5.0 = 15分
-    # 参数经10组配置扫描验证：5.0在7/7窗口正夏普，全局WF夏普2.75
-    cycle_bonus_per_pct: float = 5.0   # 周期板块每%制度偏离的加分系数
-    tech_bonus_per_pct: float = 1.0    # 科技板块每%制度偏离的加分系数
-    max_adjustment: float = 20.0       # 单板块最大调整分（防止极端值）
+    # regime_score现在基于日均涨幅差（非累计和），所以系数需要相应放大
+    # 例如：日均制度差-1% → 周期板块加 1 × 25.0 = 25分
+    # 参数经10组配置扫描 + sum→avg修正后重新验证，cb25_tb5最优
+    cycle_bonus_per_pct: float = 25.0  # 周期板块每%日均制度偏离的加分系数
+    tech_bonus_per_pct: float = 5.0    # 科技板块每%日均制度偏离的加分系数
+    max_adjustment: float = 25.0       # 单板块最大调整分（防止极端值）
 
     # ---- 换手阻尼 ----
     holdover_bonus: float = 2.0        # 昨日持仓板块的惯性加分
@@ -275,14 +275,14 @@ class ZepingMacroStrategyV8(ZepingMacroStrategy):
         ):
             return 0.0
 
-        # 短期差异
-        short_tech = sum(self._tech_history[-short_n:])
-        short_cycle = sum(self._cycle_history[-short_n:])
+        # 短期差异（用均值，消除3天vs7天的尺度差异）
+        short_tech = sum(self._tech_history[-short_n:]) / short_n
+        short_cycle = sum(self._cycle_history[-short_n:]) / short_n
         short_diff = short_tech - short_cycle
 
-        # 长期差异
-        long_tech = sum(self._tech_history[-long_n:])
-        long_cycle = sum(self._cycle_history[-long_n:])
+        # 长期差异（用均值，与短期可比）
+        long_tech = sum(self._tech_history[-long_n:]) / long_n
+        long_cycle = sum(self._cycle_history[-long_n:]) / long_n
         long_diff = long_tech - long_cycle
 
         # 双时间尺度确认
