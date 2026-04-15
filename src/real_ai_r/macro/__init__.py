@@ -7,6 +7,7 @@ from real_ai_r.macro.red_filter import RedLineFilter
 from real_ai_r.macro.tech_tracker import TechTracker
 from real_ai_r.macro.zeping_strategy import ZepingMacroStrategy
 from real_ai_r.macro.zeping_strategy_v5 import ZepingMacroStrategyV5
+from real_ai_r.macro.zeping_strategy_v6 import ZepingMacroStrategyV6
 from real_ai_r.macro.zeping_v11_engine import ZepingMacroStrategyV11
 
 __all__ = [
@@ -17,5 +18,6 @@ __all__ = [
     "AttackDefensePortfolio",
     "ZepingMacroStrategy",
     "ZepingMacroStrategyV5",
+    "ZepingMacroStrategyV6",
     "ZepingMacroStrategyV11",
 ]
