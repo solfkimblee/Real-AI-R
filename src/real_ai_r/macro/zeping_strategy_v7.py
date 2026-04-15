@@ -18,7 +18,6 @@ Walk-Forward验证驱动的设计：
 from __future__ import annotations
 
 import logging
-import math
 from dataclasses import dataclass
 
 import pandas as pd
@@ -129,8 +128,8 @@ class ZepingMacroStrategyV7(ZepingMacroStrategy):
         # Step 3: 确定目标科技数量
         target_tech = self._get_target_tech_count(regime, top_n)
 
-        # Step 4: 平滑过渡
-        target_tech = self._smooth_transition(target_tech)
+        # Step 4: 平滑过渡（并确保不超过top_n）
+        target_tech = min(self._smooth_transition(target_tech), top_n)
 
         # Step 5: 按配比从V5排序中选取Top N
         top_n_scores = self._select_by_allocation(
