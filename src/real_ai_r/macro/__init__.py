@@ -12,6 +12,12 @@ from real_ai_r.macro.zeping_strategy_v5 import ZepingMacroStrategyV5
 from real_ai_r.macro.zeping_strategy_v6 import ZepingMacroStrategyV6
 from real_ai_r.macro.zeping_strategy_v7 import ZepingMacroStrategyV7
 from real_ai_r.macro.zeping_strategy_v8 import ZepingMacroStrategyV8
+from real_ai_r.macro.zeping_strategy_v10 import (
+    DEFAULT_CHAINS,
+    V10Chain,
+    V10Params,
+    ZepingMacroStrategyV10,
+)
 from real_ai_r.macro.zeping_v11_engine import ZepingMacroStrategyV11
 
 __all__ = [
@@ -30,4 +36,8 @@ __all__ = [
     "V92Params",
     "V9_3Strategy",
     "V93Params",
+    "ZepingMacroStrategyV10",
+    "V10Params",
+    "V10Chain",
+    "DEFAULT_CHAINS",
 ]
