@@ -1,88 +1,121 @@
-# Real-AI-R 🔴 A股量化交易系统
+# Real-AI-R — 用宏观周期思维做 A 股量化
 
-A股量化交易系统 — 策略开发与回测平台
+> **一句话**：为相信"A 股随周期而动"的 Python 交易员准备的宏观轮动回测框架。
 
-## 功能特性
+把你的宏观假设（"周期强势→配置周期板块"）在真实 A 股历史上回测验证。
+零 API key，零注册，一行 `pip install` 就开跑。
 
-- **数据获取** — 基于 AKShare，支持A股日线/分钟线/财务数据，零注册门槛
-- **回测引擎** — 事件驱动架构，严格T+1规则、手续费、滑点模拟
-- **策略模板** — 可插拔设计，内置经典策略（双均线、MACD、布林带）
-- **绩效分析** — 收益率、夏普比率、最大回撤、胜率、年化收益等
-- **可视化Dashboard** — Streamlit 交互式界面，支持策略回测与结果展示
+---
 
-## 项目结构
+## 谁应该用它
 
-```
-Real-AI-R/
-├── src/real_ai_r/        # 核心代码
-│   ├── data/             # 数据获取模块（AKShare封装）
-│   ├── engine/           # 回测引擎（事件驱动）
-│   ├── strategies/       # 策略模板
-│   ├── analysis/         # 绩效分析
-│   └── utils/            # 工具函数
-├── streamlit_app/        # Streamlit Dashboard
-├── tests/                # 单元测试
-└── pyproject.toml        # 项目配置
-```
+- **定位**：A 股**板块轮动**策略的研究与回测
+- **适合**：有 Python 基础、相信泽平宏观/美林时钟类框架的主动型交易员
+- **不适合**：单股技术分析（这里关注的是板块/行业级别动量轮动）
 
-## 快速开始
+---
 
-### 安装
+## 60 秒入门
 
 ```bash
+git clone https://github.com/solfkimblee/Real-AI-R.git
+cd Real-AI-R
 pip install -e ".[dev]"
+python scripts/wf_backtest.py --demo          # 合成数据冒烟，30 秒出结果
 ```
 
-### 运行回测示例
+看到 V5/V7/V8/V10 对比表 → 环境就绪。然后：
+
+👉 **[docs/QUICKSTART.md](docs/QUICKSTART.md)** — 5 分钟跑完第一次真实回测
+👉 **[docs/strategy-guide.md](docs/strategy-guide.md)** — V5 ~ V10 对比，挑策略
+
+---
+
+## 核心价值（三个层级）
+
+### 🎯 Level 1 — 宏观板块轮动策略（主要价值）
+
+`src/real_ai_r/macro/` 下的 **泽平宏观系列**，每日给 90+ 板块打分，选 Top-10 持仓：
+
+| 版本 | 核心思想 | 真实 WF Sharpe |
+|------|----------|--------------|
+| **V8** ⭐ | 连续制度调整 + 双时间尺度 + 回撤制动 | **+2.86** (7/7 正窗口) |
+| V7 | 动态科技/周期配比 | +2.60 |
+| V9.2 | Hedge 元集成 (V5/V7/V8/V9 软融合) | +2.10 |
+| V10 | 泽平三维度 × 产业链 × 卖铲人 | +0.75 |
+
+```python
+from real_ai_r.macro import ZepingMacroStrategyV8
+strat = ZepingMacroStrategyV8()
+result = strat.predict(board_df, top_n=10,
+                       tech_history=..., cycle_history=...)
+# result.predictions[0].board_name → 当日 Top-1 板块
+```
+
+### 🔧 Level 2 — 单股策略回测引擎
+
+事件驱动，严格 T+1、手续费、滑点、印花税：
 
 ```python
 from real_ai_r.data.fetcher import DataFetcher
 from real_ai_r.engine.backtest import BacktestEngine
 from real_ai_r.strategies.ma_cross import MACrossStrategy
 
-# 1. 获取数据
 fetcher = DataFetcher()
 data = fetcher.get_stock_daily("000001", start_date="2023-01-01", end_date="2024-01-01")
-
-# 2. 创建策略
-strategy = MACrossStrategy(short_window=5, long_window=20)
-
-# 3. 运行回测
-engine = BacktestEngine(
-    data=data,
-    strategy=strategy,
-    initial_capital=100000.0,
-    commission_rate=0.0003,  # 万三手续费
-    slippage=0.001,          # 0.1% 滑点
-)
-result = engine.run()
-
-# 4. 查看结果
-print(result.summary())
+engine = BacktestEngine(data=data, strategy=MACrossStrategy(5, 20),
+                        initial_capital=100000.0,
+                        commission_rate=0.0003, slippage=0.001)
+print(engine.run().metrics)
 ```
 
-### 启动Dashboard
+### 📊 Level 3 — 可视化 Dashboard
 
 ```bash
 streamlit run streamlit_app/app.py
 ```
 
-## 内置策略
+---
 
-| 策略 | 说明 | 参数 |
-|------|------|------|
-| **双均线策略** | 短期均线上穿长期均线买入，下穿卖出 | short_window, long_window |
-| **MACD策略** | 基于MACD金叉/死叉信号 | fast, slow, signal |
-| **布林带策略** | 价格触及下轨买入，触及上轨卖出 | window, num_std |
+## 快速回测你自己的想法
 
-## 技术栈
+```bash
+# 多策略一键对比 (需准备 panel_*.parquet，见 data/README.md)
+python scripts/wf_backtest.py \
+    --panel data/panel_val.parquet \
+    --strategies V5,V7,V8,V9.2,V10 \
+    --windows 7 --window-size 20 \
+    --report-md report.md
+```
 
-- **Python 3.10+**
-- **AKShare** — A股数据获取
-- **Pandas / NumPy** — 数据处理
-- **TA-Lib (ta)** — 技术指标计算
-- **Plotly** — 交互式图表
-- **Streamlit** — Web Dashboard
+输出：每策略的 Sharpe / IR / 累计超额 / 最大回撤 / 胜率 + 逐窗口分解。
+
+---
+
+## 项目结构
+
+```
+src/real_ai_r/
+├── macro/           # ⭐ 宏观板块轮动策略 (V5/V7/V8/V9.2/V9.3/V10)
+├── v9/              # V9 在线学习框架 (因子库 + HMM + QP + Hedge)
+├── engine/          # 单股回测引擎
+├── strategies/      # 单股策略 (MA/MACD/布林)
+├── data/            # AKShare 封装 + 本地缓存
+└── analysis/        # 绩效指标 + Plotly 图表
+
+scripts/wf_backtest.py  # 走步回测 harness（支持全部策略对比）
+streamlit_app/          # Streamlit Dashboard
+docs/                   # QUICKSTART + strategy-guide
+tests/                  # 200+ 单测
+```
+
+---
+
+## 文档索引
+
+- [docs/QUICKSTART.md](docs/QUICKSTART.md) — 5 分钟入门
+- [docs/strategy-guide.md](docs/strategy-guide.md) — 策略版本选型
+- [data/README.md](data/README.md) — 数据准备规范
 
 ## License
 
