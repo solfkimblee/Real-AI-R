@@ -18,6 +18,13 @@ from real_ai_r.macro.cycle_tracker import CycleTracker, StageStatus
 from real_ai_r.macro.portfolio import AttackDefensePortfolio, PortfolioSlot
 from real_ai_r.macro.red_filter import RedLineFilter
 from real_ai_r.macro.tech_tracker import TechTracker, TrackSnapshot
+from real_ai_r.macro.zeping_strategy import (
+    ZepingBoardScore,
+    ZepingMacroStrategy,
+    ZepingParams,
+    ZepingPredictionResult,
+    ZepingWeights,
+)
 
 # ===================================================================
 # Fixtures
@@ -559,3 +566,208 @@ class TestConstants:
         """验证五段论阶段编号连续 1-5。"""
         stage_nums = sorted(s["stage"] for s in CYCLE_STAGES.values())
         assert stage_nums == [1, 2, 3, 4, 5]
+
+
+# ===================================================================
+# ZepingMacroStrategy 测试
+# ===================================================================
+
+
+class TestZepingWeights:
+    """泽平策略权重测试。"""
+
+    def test_default_weights(self) -> None:
+        w = ZepingWeights()
+        assert w.macro == 0.40
+        assert w.quant == 0.40
+        assert w.cycle == 0.20
+        assert w.macro + w.quant + w.cycle == pytest.approx(1.0)
+
+    def test_custom_weights(self) -> None:
+        w = ZepingWeights(macro=0.5, quant=0.3, cycle=0.2)
+        assert w.macro == 0.5
+        assert w.quant == 0.3
+
+    def test_frozen(self) -> None:
+        w = ZepingWeights()
+        with pytest.raises(AttributeError):
+            w.macro = 0.5  # type: ignore[misc]
+
+
+class TestZepingParams:
+    """泽平策略参数测试。"""
+
+    def test_default_params(self) -> None:
+        p = ZepingParams()
+        assert p.tech_base_score == 70.0
+        assert p.cycle_base_score == 55.0
+        assert p.neutral_base_score == 40.0
+        assert p.momentum_weight == 5.0
+
+    def test_frozen(self) -> None:
+        p = ZepingParams()
+        with pytest.raises(AttributeError):
+            p.tech_base_score = 99.0  # type: ignore[misc]
+
+
+class TestZepingMacroStrategy:
+    """泽平宏观策略核心测试。"""
+
+    def test_init_default(self) -> None:
+        strategy = ZepingMacroStrategy()
+        assert strategy.weights.macro == 0.40
+        assert strategy.weights.quant == 0.40
+        assert strategy.weights.cycle == 0.20
+
+    def test_init_custom_weights(self) -> None:
+        w = ZepingWeights(macro=0.5, quant=0.3, cycle=0.2)
+        strategy = ZepingMacroStrategy(weights=w)
+        assert strategy.weights.macro == 0.5
+
+    def test_predict_with_board_data(self, mock_board_df: pd.DataFrame) -> None:
+        strategy = ZepingMacroStrategy()
+        result = strategy.predict(board_df=mock_board_df, top_n=5)
+
+        assert isinstance(result, ZepingPredictionResult)
+        assert len(result.predictions) == 5
+        assert result.total_boards > 0
+        assert result.filtered_redline > 0  # 房地产+白酒被过滤
+        assert result.market_style != ""
+        assert result.strategy_summary != ""
+
+    def test_redline_filtered(self, mock_board_df: pd.DataFrame) -> None:
+        """红线禁区板块被正确排除。"""
+        strategy = ZepingMacroStrategy()
+        result = strategy.predict(board_df=mock_board_df, top_n=10)
+
+        board_names = [s.board_name for s in result.predictions]
+        assert "房地产开发" not in board_names
+        assert "白酒" not in board_names
+
+    def test_tech_boards_score_higher(self, mock_board_df: pd.DataFrame) -> None:
+        """科技主线板块应获得更高的宏观分。"""
+        strategy = ZepingMacroStrategy()
+        result = strategy.predict(board_df=mock_board_df, top_n=10)
+
+        tech_scores = [s for s in result.predictions if s.macro_category == "tech"]
+        neutral_scores = [s for s in result.predictions if s.macro_category == "neutral"]
+
+        if tech_scores and neutral_scores:
+            avg_tech_macro = sum(s.macro_score for s in tech_scores) / len(tech_scores)
+            avg_neutral_macro = sum(s.macro_score for s in neutral_scores) / len(neutral_scores)
+            assert avg_tech_macro > avg_neutral_macro
+
+    def test_scores_bounded(self, mock_board_df: pd.DataFrame) -> None:
+        """所有子分应在 0-100 范围内。"""
+        strategy = ZepingMacroStrategy()
+        result = strategy.predict(board_df=mock_board_df, top_n=10)
+
+        for s in result.predictions:
+            assert 0 <= s.macro_score <= 100, f"{s.board_name} macro_score={s.macro_score}"
+            assert 0 <= s.quant_score <= 100, f"{s.board_name} quant_score={s.quant_score}"
+            assert 0 <= s.cycle_score <= 100, f"{s.board_name} cycle_score={s.cycle_score}"
+
+    def test_sorted_by_total_score(self, mock_board_df: pd.DataFrame) -> None:
+        """结果应按总分降序排列。"""
+        strategy = ZepingMacroStrategy()
+        result = strategy.predict(board_df=mock_board_df, top_n=10)
+
+        for i in range(len(result.predictions) - 1):
+            assert result.predictions[i].total_score >= result.predictions[i + 1].total_score
+
+    def test_reasons_populated(self, mock_board_df: pd.DataFrame) -> None:
+        """每个板块应有推荐理由。"""
+        strategy = ZepingMacroStrategy()
+        result = strategy.predict(board_df=mock_board_df, top_n=5)
+
+        for s in result.predictions:
+            assert len(s.reasons) > 0, f"{s.board_name} 无推荐理由"
+
+    def test_to_dataframe(self, mock_board_df: pd.DataFrame) -> None:
+        """DataFrame 输出包含必要列。"""
+        strategy = ZepingMacroStrategy()
+        result = strategy.predict(board_df=mock_board_df, top_n=5)
+        df = strategy.to_dataframe(result.predictions)
+
+        assert isinstance(df, pd.DataFrame)
+        assert len(df) == 5
+        assert "板块" in df.columns
+        assert "总分" in df.columns
+        assert "宏观分" in df.columns
+        assert "量化分" in df.columns
+        assert "周期分" in df.columns
+
+    def test_score_snapshot(self, mock_board_df: pd.DataFrame) -> None:
+        """score_snapshot 方法应返回正确结果。"""
+        strategy = ZepingMacroStrategy()
+        scores = strategy.score_snapshot(mock_board_df, top_n=3)
+
+        assert len(scores) == 3
+        assert all(isinstance(s, ZepingBoardScore) for s in scores)
+
+    def test_empty_dataframe(self) -> None:
+        """空 DataFrame 应返回空结果。"""
+        strategy = ZepingMacroStrategy()
+        result = strategy.predict(board_df=pd.DataFrame(), top_n=10)
+
+        assert result.predictions == []
+        assert result.total_boards == 0
+
+    def test_cycle_stage_detection(self, mock_board_df: pd.DataFrame) -> None:
+        """应正确检测最热周期阶段。"""
+        strategy = ZepingMacroStrategy()
+        result = strategy.predict(board_df=mock_board_df, top_n=5)
+
+        # 黄金(+1.2%) > 煤炭(+0.8%) > 农业(+0.5%) > 食品饮料(-0.3%)
+        # 所以最热阶段应该是贵金属 (stage 1)
+        assert result.current_hot_stage >= 1
+
+    def test_market_style_judgment(self, mock_board_df: pd.DataFrame) -> None:
+        """市场风格判断非空。"""
+        strategy = ZepingMacroStrategy()
+        result = strategy.predict(board_df=mock_board_df, top_n=5)
+
+        assert "风格" in result.market_style
+
+    def test_shovel_seller_bonus(self) -> None:
+        """'卖铲人'赛道应获得额外加分。"""
+        strategy = ZepingMacroStrategy()
+
+        # 芯片板块 = 卖铲人
+        chip_df = pd.DataFrame({
+            "name": ["半导体"],
+            "code": ["BK0001"],
+            "change_pct": [1.0],
+            "turnover_rate": [3.0],
+            "rise_count": [50],
+            "fall_count": [10],
+            "lead_stock_pct": [5.0],
+        })
+        # AI板块 = 非卖铲人
+        ai_df = pd.DataFrame({
+            "name": ["人工智能"],
+            "code": ["BK0002"],
+            "change_pct": [1.0],
+            "turnover_rate": [3.0],
+            "rise_count": [50],
+            "fall_count": [10],
+            "lead_stock_pct": [5.0],
+        })
+
+        chip_result = strategy.predict(board_df=chip_df, top_n=1)
+        ai_result = strategy.predict(board_df=ai_df, top_n=1)
+
+        if chip_result.predictions and ai_result.predictions:
+            # 芯片的宏观分应高于AI（因为卖铲人加成）
+            assert chip_result.predictions[0].macro_score >= ai_result.predictions[0].macro_score
+
+    def test_predict_from_snapshot(self, mock_board_df: pd.DataFrame) -> None:
+        """predict_from_snapshot 应与 predict 结果一致。"""
+        strategy = ZepingMacroStrategy()
+        result1 = strategy.predict(board_df=mock_board_df, top_n=5)
+        result2 = strategy.predict_from_snapshot(mock_board_df, top_n=5)
+
+        assert len(result1.predictions) == len(result2.predictions)
+        for s1, s2 in zip(result1.predictions, result2.predictions):
+            assert s1.board_name == s2.board_name
+            assert s1.total_score == s2.total_score

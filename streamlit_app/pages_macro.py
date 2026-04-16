@@ -1,11 +1,12 @@
 """宏观分析 Streamlit 页面
 
-包含五个功能标签页：
+包含六个功能标签页：
 1. 板块分类总览 — 科技/周期/红线三大类标签分布
 2. 周期轮动仪表盘 — 五段论温度计
 3. 科技赛道追踪 — 六大赛道热度对比
 4. 避雷指南 — 红线禁区板块明细
 5. 攻防组合 — 科技矛 + 周期盾推荐
+6. 泽平宏观策略 — 融合宏观方法论 + 规则引擎预测
 """
 
 from __future__ import annotations
@@ -26,6 +27,7 @@ from real_ai_r.macro.cycle_tracker import CycleTracker
 from real_ai_r.macro.portfolio import AttackDefensePortfolio
 from real_ai_r.macro.red_filter import RedLineFilter
 from real_ai_r.macro.tech_tracker import TechTracker
+from real_ai_r.macro.zeping_strategy import ZepingMacroStrategy, ZepingWeights
 from real_ai_r.sector.monitor import SectorMonitor
 
 # ======================================================================
@@ -580,3 +582,212 @@ def render_portfolio() -> None:
         # ---- 完整组合表 ----
         st.markdown("### 📋 完整组合明细")
         st.dataframe(portfolio_df, use_container_width=True, hide_index=True)
+
+
+# ======================================================================
+# 6. 泽平宏观策略
+# ======================================================================
+
+def render_zeping_strategy() -> None:
+    """渲染泽平宏观策略预测页。"""
+    st.markdown("## 🧭 泽平宏观策略")
+    st.info(
+        "**深度融合泽平投资方法论 + 规则引擎量化信号**\n\n"
+        "核心公式：`总分 = 宏观维度(40%) + 量化维度(40%) + 周期维度(20%)`\n\n"
+        "📌 宏观定方向 → 周期定节奏 → 产业定赛道 → 壁垒和订单定龙头 → 催化剂定爆发"
+    )
+
+    # ---- 参数配置 ----
+    with st.expander("⚙️ 策略参数配置", expanded=False):
+        st.markdown("#### 三维度权重")
+        col_w1, col_w2, col_w3 = st.columns(3)
+        with col_w1:
+            w_macro = st.slider(
+                "宏观维度权重", 0.1, 0.6, 0.4, 0.05, key="zp_w_macro",
+                help="科技/周期分类 + 赛道热度 + 红线过滤",
+            )
+        with col_w2:
+            w_quant = st.slider(
+                "量化维度权重", 0.1, 0.6, 0.4, 0.05, key="zp_w_quant",
+                help="动量 + 换手率 + 上涨广度 + 领涨强度",
+            )
+        with col_w3:
+            w_cycle = st.slider(
+                "周期维度权重", 0.0, 0.4, 0.2, 0.05, key="zp_w_cycle",
+                help="五段论阶段匹配度（顺周期加分、逆周期减分）",
+            )
+
+        # 归一化权重
+        w_total = w_macro + w_quant + w_cycle
+        if abs(w_total - 1.0) > 0.01:
+            st.warning(f"权重之和为 {w_total:.2f}，已自动归一化为 1.0")
+            w_macro, w_quant, w_cycle = (
+                w_macro / w_total,
+                w_quant / w_total,
+                w_cycle / w_total,
+            )
+
+        st.markdown("#### 其他参数")
+        col_p1, col_p2 = st.columns(2)
+        with col_p1:
+            top_n = st.slider("推荐板块数", 5, 30, 10, key="zp_top_n")
+        with col_p2:
+            board_type = st.radio(
+                "板块类型", ["行业板块", "概念板块"],
+                horizontal=True, key="zp_board_type",
+            )
+
+    # ---- 运行按钮 ----
+    run_btn = st.button("🧭 运行泽平宏观策略", type="primary", key="zp_run")
+
+    if not run_btn:
+        # 方法论说明
+        st.markdown("---")
+        st.markdown("### 📖 泽平投资方法论")
+        col_m1, col_m2 = st.columns(2)
+
+        with col_m1:
+            st.markdown("""
+            **宏观维度 (40%)**
+            - 🗡️ **科技主线** → 基础分70 + 赛道热度加成(0-30)
+            - 🛡️ **周期主线** → 基础分55
+            - 🚫 **红线禁区** → 直接排除
+            - ⚪ **其他** → 基础分40
+
+            **"卖铲人"偏好**
+            - 🔧 芯片/算力链 → 额外加10分
+            - 🚗 新能源车 → 额外加10分
+            - 原因：基础设施层更早兑现业绩
+            """)
+
+        with col_m2:
+            st.markdown("""
+            **量化维度 (40%)**
+            - 📈 1日动量 × 5（趋势延续，A股最有效因子）
+            - 🔄 换手率 × 2（活跃度信号）
+            - 📊 上涨广度（板块内多数个股涨=健康趋势）
+            - 🏆 领涨强度（龙头效应加成）
+
+            **周期维度 (20%)**
+            - 🔥 热阶段匹配 → +20分
+            - ⚡ 相邻阶段 → +10分
+            - ❄️ 远离阶段 → -5分
+            - 🌾 重点布局区(农业后周期) → +15分
+            """)
+
+        return
+
+    # ---- 运行策略 ----
+    bt = "industry" if board_type == "行业板块" else "concept"
+    weights = ZepingWeights(macro=w_macro, quant=w_quant, cycle=w_cycle)
+    strategy = ZepingMacroStrategy(weights=weights)
+
+    with st.spinner("🧭 正在运行泽平宏观策略..."):
+        try:
+            board_df = SectorMonitor.get_board_list(bt)
+            result = strategy.predict(board_df=board_df, top_n=top_n)
+        except Exception as e:
+            st.error(f"策略运行失败: {e}")
+            return
+
+    if not result.predictions:
+        st.warning("未生成有效预测，可能是数据获取失败")
+        return
+
+    # ---- 策略摘要 ----
+    st.success(
+        f"策略运行完成！评估 {result.total_boards} 个板块，"
+        f"过滤 {result.filtered_redline} 个红线板块"
+    )
+
+    st.markdown("### 🎯 策略摘要")
+    summary_lines = result.strategy_summary.split("\n")
+    for line in summary_lines:
+        if line.strip():
+            st.markdown(f"- {line.strip()}")
+
+    # ---- 核心指标卡片 ----
+    st.markdown("### 📊 市场风格判断")
+    col_s1, col_s2, col_s3, col_s4 = st.columns(4)
+    top_preds = result.predictions
+    tech_count = sum(1 for s in top_preds if s.macro_category == "tech")
+    cycle_count = sum(1 for s in top_preds if s.macro_category == "cycle")
+    neutral_count = sum(1 for s in top_preds if s.macro_category == "neutral")
+
+    with col_s1:
+        st.metric("🗡️ 科技主线", f"{tech_count} 个")
+    with col_s2:
+        st.metric("🛡️ 周期主线", f"{cycle_count} 个")
+    with col_s3:
+        st.metric("⚪ 其他", f"{neutral_count} 个")
+    with col_s4:
+        avg_score = sum(s.total_score for s in top_preds) / len(top_preds)
+        st.metric("平均得分", f"{avg_score:.1f}")
+
+    # ---- 预测排名表 ----
+    st.markdown("### 🏆 泽平宏观策略 Top 推荐")
+    score_df = strategy.to_dataframe(top_preds)
+    st.dataframe(score_df, use_container_width=True, hide_index=True)
+
+    # ---- 三维度评分柱状图 ----
+    st.markdown("### 📊 三维度评分拆解")
+    chart_data = pd.DataFrame([
+        {
+            "板块": s.board_name,
+            "宏观分": s.macro_score * weights.macro,
+            "量化分": s.quant_score * weights.quant,
+            "周期分": s.cycle_score * weights.cycle,
+        }
+        for s in top_preds
+    ])
+    fig_stack = go.Figure()
+    colors = {"宏观分": "#FF6B6B", "量化分": "#4ECDC4", "周期分": "#45B7D1"}
+    for dim, color in colors.items():
+        fig_stack.add_trace(go.Bar(
+            name=dim,
+            x=chart_data["板块"],
+            y=chart_data[dim],
+            marker_color=color,
+        ))
+    fig_stack.update_layout(
+        barmode="stack",
+        height=450,
+        margin=dict(t=30, b=60),
+        xaxis_tickangle=-45,
+        legend=dict(orientation="h", yanchor="bottom", y=1.02),
+    )
+    st.plotly_chart(fig_stack, use_container_width=True)
+
+    # ---- 分类分布饼图 ----
+    st.markdown("### 🥧 推荐板块分类分布")
+    pie_data = pd.DataFrame([
+        {"分类": "🗡️ 科技主线", "数量": tech_count},
+        {"分类": "🛡️ 周期主线", "数量": cycle_count},
+        {"分类": "⚪ 其他", "数量": neutral_count},
+    ])
+    pie_data = pie_data[pie_data["数量"] > 0]
+    if not pie_data.empty:
+        fig_pie = px.pie(
+            pie_data, names="分类", values="数量",
+            color="分类",
+            color_discrete_map={
+                "🗡️ 科技主线": "#FF6B6B",
+                "🛡️ 周期主线": "#4ECDC4",
+                "⚪ 其他": "#DDD",
+            },
+        )
+        fig_pie.update_layout(height=350, margin=dict(t=20, b=20))
+        st.plotly_chart(fig_pie, use_container_width=True)
+
+    # ---- 推荐理由详情 ----
+    with st.expander("📝 各板块推荐理由", expanded=False):
+        for s in top_preds:
+            reasons_str = " | ".join(s.reasons)
+            icon = (
+                "🗡️" if s.macro_category == "tech"
+                else "🛡️" if s.macro_category == "cycle"
+                else "⚪"
+            )
+            st.markdown(
+                f"**{icon} {s.board_name}** (总分 {s.total_score:.1f}) — {reasons_str}"
+            )
