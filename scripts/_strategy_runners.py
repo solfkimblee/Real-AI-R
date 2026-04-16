@@ -40,12 +40,22 @@ class ZepingRunner:
     strategy: Any  # ZepingMacroStrategy-like
 
     def predict(self, board_df, top_n, tech_history, cycle_history):
-        result = self.strategy.predict(
-            board_df=board_df,
-            top_n=top_n,
-            tech_history=tech_history,
-            cycle_history=cycle_history,
-        )
+        # V5 基类 predict() 不接受 tech_history/cycle_history，
+        # V7/V8/V10 重写了 predict() 才接受这些参数。
+        import inspect
+        sig = inspect.signature(self.strategy.predict)
+        if "tech_history" in sig.parameters:
+            result = self.strategy.predict(
+                board_df=board_df,
+                top_n=top_n,
+                tech_history=tech_history,
+                cycle_history=cycle_history,
+            )
+        else:
+            result = self.strategy.predict(
+                board_df=board_df,
+                top_n=top_n,
+            )
         return [p.board_name for p in result.predictions]
 
     def record_day(self, realized_returns, excess_per_board, daily_excess):
