@@ -3,6 +3,7 @@
 from real_ai_r.macro.classifier import SectorClassifier
 from real_ai_r.macro.cycle_tracker import CycleTracker
 from real_ai_r.macro.meta_ensemble_v92 import MetaEnsembleStrategyV92, V92Params
+from real_ai_r.macro.v9_3_warmstart import V9_3Strategy, V93Params
 from real_ai_r.macro.portfolio import AttackDefensePortfolio
 from real_ai_r.macro.red_filter import RedLineFilter
 from real_ai_r.macro.tech_tracker import TechTracker
@@ -27,4 +28,6 @@ __all__ = [
     "ZepingMacroStrategyV11",
     "MetaEnsembleStrategyV92",
     "V92Params",
+    "V9_3Strategy",
+    "V93Params",
 ]
