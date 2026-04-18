@@ -20,6 +20,7 @@ from real_ai_r.macro.zeping_strategy_v10 import (
 )
 from real_ai_r.macro.zeping_v11_engine import ZepingMacroStrategyV11
 from real_ai_r.macro.zeping_strategy_v11_lgbm import ZepingLGBMStrategy
+from real_ai_r.macro.zeping_strategy_v12_lgbm import ZepingLGBMStrategyV12
 
 __all__ = [
     "SectorClassifier",
@@ -42,4 +43,5 @@ __all__ = [
     "V10Params",
     "V10Chain",
     "DEFAULT_CHAINS",
+    "ZepingLGBMStrategyV12",
 ]
