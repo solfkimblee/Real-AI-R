@@ -1,4 +1,4 @@
-"""策略运行器 — 把 V5/V7/V8/V9.2/V9.3/V10 统一到同一个 predict 接口。
+"""策略运行器 — 把 V5/V7/V8/V9.2/V9.3/V10/V11(LGB) 统一到同一个 predict 接口。
 
 每个 runner 是一个 callable:
     runner.predict(board_df, top_n, tech_history, cycle_history) -> list[board_name]
@@ -132,10 +132,10 @@ def build_runners(
     """实例化各策略并包装为统一 runner。
 
     参数:
-        strategies: ['V5','V7','V8','V9.2','V9.3','V10']，None=全部
-        warmup_panel: 仅 V9.3 需要；若 None，V9.3 跳过
+        strategies: ['V5','V7','V8','V9.2','V9.3','V10','V11','V12']，None=全部
+        warmup_panel: V9.3/V11/V12 需要；若 None，这些策略跳过
     """
-    chosen = strategies or ["V5", "V7", "V8", "V9.2", "V9.3", "V10"]
+    chosen = strategies or ["V5", "V7", "V8", "V9.2", "V9.3", "V10", "V11", "V12"]
     runners: list[StrategyRunner] = []
 
     if "V5" in chosen:
@@ -174,5 +174,23 @@ def build_runners(
     if "V10" in chosen:
         from real_ai_r.macro.zeping_strategy_v10 import ZepingMacroStrategyV10
         runners.append(ZepingRunner("V10", ZepingMacroStrategyV10()))
+
+    if "V11" in chosen and warmup_panel is not None and len(warmup_panel) > 0:
+        from real_ai_r.macro.zeping_strategy_v11_lgbm import ZepingLGBMStrategy
+        v11 = ZepingLGBMStrategy()
+        try:
+            v11.fit(warmup_panel)
+            runners.append(ZepingRunner("V11(LGB)", v11))
+        except Exception as e:
+            print(f"[warn] V11 LGB training failed: {e}; skipping V11")
+
+    if "V12" in chosen and warmup_panel is not None and len(warmup_panel) > 0:
+        from real_ai_r.macro.zeping_strategy_v12_lgbm import ZepingLGBMStrategyV12
+        v12 = ZepingLGBMStrategyV12()
+        try:
+            v12.fit(warmup_panel)
+            runners.append(ZepingRunner("V12(LGB+)", v12))
+        except Exception as e:
+            print(f"[warn] V12 LGB+ training failed: {e}; skipping V12")
 
     return runners
