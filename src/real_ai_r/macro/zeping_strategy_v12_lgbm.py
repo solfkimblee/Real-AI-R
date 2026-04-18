@@ -246,14 +246,11 @@ def _build_linkage_features(panel: pd.DataFrame) -> pd.DataFrame:
 
 def _apply_cs_rank(panel: pd.DataFrame) -> tuple[pd.DataFrame, list[str]]:
     """对所有数值特征做截面排名归一化。"""
-    exclude_cols = {
-        "date", "name", "target_ret_1d", "target_ret_3d", "target_ret_5d",
-        "target_rank_1d", "target_rank_3d", "target_rank_5d",
-        "target_ret", "target_rank", "excess",
-    }
+    exclude_cols = {"date", "name", "excess"}
     raw_features = [
         c for c in panel.columns
         if c not in exclude_cols
+        and not c.startswith("target_")  # 排除所有target列，防止任意horizon的target泄漏
         and panel[c].dtype in [np.float64, np.float32, np.int64, np.int32,
                                float, int]
     ]
