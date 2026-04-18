@@ -540,6 +540,16 @@ class ZepingLGBMStrategyV12:
             self._accumulated_panel = pd.concat(
                 [self._accumulated_panel, board_df], ignore_index=True
             )
+            # 裁剪到 retrain_window 天，避免无限增长（O(n²)分配开销）
+            self._accumulated_panel["date"] = pd.to_datetime(
+                self._accumulated_panel["date"]
+            )
+            dates = sorted(self._accumulated_panel["date"].unique())
+            if len(dates) > self.retrain_window:
+                cutoff = dates[-self.retrain_window]
+                self._accumulated_panel = self._accumulated_panel[
+                    self._accumulated_panel["date"] >= cutoff
+                ].reset_index(drop=True)
 
         self._days_since_retrain += 1
 
