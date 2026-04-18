@@ -319,7 +319,8 @@ def main():
 
     # WF参数: 尽量多切窗口
     window_size = 20
-    n_windows = n_days // window_size
+    # run_wf produces n_days-1 data points (today predict → tomorrow return)
+    n_windows = (n_days - 1) // window_size
     if n_windows < 1:
         n_windows = 1
     print(f"  WF窗口: {n_windows} × {window_size}天 = {n_windows * window_size}天")
