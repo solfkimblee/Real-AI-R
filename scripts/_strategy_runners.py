@@ -136,7 +136,7 @@ def build_runners(
                      'V12a','V12b','V12c','V13']，None=全部（不含消融变体）
         warmup_panel: V9.3/V11/V12/V13 需要；若 None，这些策略跳过
     """
-    chosen = strategies or ["V5", "V7", "V8", "V9.2", "V9.3", "V10", "V11", "V13"]
+    chosen = strategies or ["V5", "V7", "V8", "V9.2", "V9.3", "V10", "V11", "V12", "V13"]
     runners: list[StrategyRunner] = []
 
     if "V5" in chosen:
@@ -204,15 +204,16 @@ def build_runners(
             print(f"[warn] V13 LGB+ZP training failed: {e}; skipping V13")
 
     # --- V12 消融变体 ---
-    # Note: ablation intent expressed via existing V12 constructor params.
+    # Note: All V12 variants include linkage features (V12 always builds them).
     #   retrain_every=999999 effectively disables rolling retrain.
     #   horizons=(1,) uses single horizon (no multi-horizon).
-    #   Linkage features are always built by V12; V12a/V12b use V11 directly
-    #   (no linkage) while V12c uses V12 with single horizon + no retrain.
+    #   V12a = retrain + linkage (no multi-horizon)
+    #   V12b = multi-horizon + linkage (no retrain)
+    #   V12c = linkage only (single horizon, no retrain)
     if "V12a" in chosen and warmup_panel is not None and len(warmup_panel) > 0:
         try:
             from real_ai_r.macro.zeping_strategy_v12_lgbm import ZepingLGBMStrategyV12
-            # V12a: 仅滚动再训练（单horizon, 无联动特征）→ 用V12 + 单horizon
+            # V12a: 滚动再训练 + 联动特征（单horizon, 无多horizon融合）
             v12a = ZepingLGBMStrategyV12(
                 horizons=(1,), horizon_weights=(1.0,),
                 retrain_every=20, retrain_window=250,
@@ -225,7 +226,7 @@ def build_runners(
     if "V12b" in chosen and warmup_panel is not None and len(warmup_panel) > 0:
         try:
             from real_ai_r.macro.zeping_strategy_v12_lgbm import ZepingLGBMStrategyV12
-            # V12b: 仅多horizon融合（无滚动再训练, 含联动特征）
+            # V12b: 多horizon融合 + 联动特征（无滚动再训练）
             v12b = ZepingLGBMStrategyV12(
                 horizons=(1, 3, 5), horizon_weights=(0.5, 0.3, 0.2),
                 retrain_every=999999,
@@ -238,7 +239,7 @@ def build_runners(
     if "V12c" in chosen and warmup_panel is not None and len(warmup_panel) > 0:
         try:
             from real_ai_r.macro.zeping_strategy_v12_lgbm import ZepingLGBMStrategyV12
-            # V12c: 仅联动特征（单horizon, 无滚动再训练）
+            # V12c: 联动特征 only（单horizon, 无滚动再训练）
             v12c = ZepingLGBMStrategyV12(
                 horizons=(1,), horizon_weights=(1.0,),
                 retrain_every=999999,
