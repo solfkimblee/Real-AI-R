@@ -269,14 +269,19 @@ def _apply_cs_rank(panel: pd.DataFrame) -> tuple[pd.DataFrame, list[str]]:
 def build_training_data(
     panel: pd.DataFrame,
     horizons: tuple[int, ...] = (1, 3, 5),
+    use_linkage: bool = True,
 ) -> tuple[pd.DataFrame, list[str]]:
-    """构造完整训练数据（V11基础特征 + V12联动特征 + 多horizon目标）。
+    """构造完整训练数据（V11基础特征 + 可选V12联动特征 + 多horizon目标）。
+
+    Args:
+        use_linkage: 是否使用泽平联动特征（V12c消融实验用）
 
     Returns:
         (featured_panel, feature_columns)
     """
     panel = _build_ts_features(panel)
-    panel = _build_linkage_features(panel)
+    if use_linkage:
+        panel = _build_linkage_features(panel)
 
     # 超额收益
     daily_avg = panel.groupby("date")["change_pct"].transform("mean")
@@ -305,12 +310,14 @@ def build_training_data(
 def build_inference_features(
     board_df: pd.DataFrame,
     history: list[pd.DataFrame],
+    use_linkage: bool = True,
 ) -> tuple[pd.DataFrame, list[str]]:
-    """为当日数据构造推理特征（含V12联动特征）。"""
+    """为当日数据构造推理特征（可选V12联动特征）。"""
     all_dfs = history + [board_df]
     panel = pd.concat(all_dfs, ignore_index=True)
     panel = _build_ts_features(panel)
-    panel = _build_linkage_features(panel)
+    if use_linkage:
+        panel = _build_linkage_features(panel)
     panel, feat_cols = _apply_cs_rank(panel)
 
     today_date = pd.to_datetime(board_df["date"].iloc[0])
@@ -354,6 +361,8 @@ class ZepingLGBMStrategyV12:
         retrain_window: int = 250,
         horizons: tuple[int, ...] = (1, 3, 5),
         horizon_weights: tuple[float, ...] = (0.5, 0.3, 0.2),
+        enable_retrain: bool = True,
+        use_linkage: bool = True,
         lgbm_params: dict[str, Any] | None = None,
     ):
         self.n_estimators = n_estimators
@@ -362,6 +371,8 @@ class ZepingLGBMStrategyV12:
         self.retrain_window = retrain_window
         self.horizons = horizons
         self.horizon_weights = horizon_weights
+        self.enable_retrain = enable_retrain
+        self.use_linkage = use_linkage
         self.lgbm_params = lgbm_params or {
             "objective": "regression",
             "metric": "mae",
@@ -390,7 +401,9 @@ class ZepingLGBMStrategyV12:
         if lgb is None:
             raise ImportError("lightgbm not installed")
 
-        featured, feat_cols = build_training_data(panel_df, self.horizons)
+        featured, feat_cols = build_training_data(
+            panel_df, self.horizons, use_linkage=self.use_linkage
+        )
         self.feature_cols = feat_cols
 
         for h in self.horizons:
@@ -442,8 +455,9 @@ class ZepingLGBMStrategyV12:
                 panel_df[panel_df["date"] == d].reset_index(drop=True)
             )
 
-        # 保存完整训练数据用于滚动再训练
-        self._accumulated_panel = panel_df.copy()
+        # 保存完整训练数据用于滚动再训练（仅在启用时）
+        if self.enable_retrain:
+            self._accumulated_panel = panel_df.copy()
         self._days_since_retrain = 0
 
     def _maybe_retrain(self) -> None:
@@ -483,12 +497,14 @@ class ZepingLGBMStrategyV12:
             return ZepingPredictionResult(predictions=[])
 
         # 滚动再训练检查
-        self._maybe_retrain()
+        if self.enable_retrain:
+            self._maybe_retrain()
 
         # 构造今日特征（含联动特征）
         today_featured, infer_feat_cols = build_inference_features(
             board_df=board_df,
             history=self._history[-self.max_history_days:],
+            use_linkage=self.use_linkage,
         )
 
         if today_featured.empty:
@@ -533,7 +549,7 @@ class ZepingLGBMStrategyV12:
         if len(self._history) > self.max_history_days:
             self._history = self._history[-self.max_history_days:]
 
-        if self._accumulated_panel is not None:
+        if self.enable_retrain and self._accumulated_panel is not None:
             self._accumulated_panel = pd.concat(
                 [self._accumulated_panel, board_df], ignore_index=True
             )
