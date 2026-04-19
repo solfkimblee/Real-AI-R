@@ -204,40 +204,45 @@ def build_runners(
             print(f"[warn] V13 LGB+ZP training failed: {e}; skipping V13")
 
     # --- V12 消融变体 ---
+    # Note: ablation intent expressed via existing V12 constructor params.
+    #   retrain_every=999999 effectively disables rolling retrain.
+    #   horizons=(1,) uses single horizon (no multi-horizon).
+    #   Linkage features are always built by V12; V12a/V12b use V11 directly
+    #   (no linkage) while V12c uses V12 with single horizon + no retrain.
     if "V12a" in chosen and warmup_panel is not None and len(warmup_panel) > 0:
-        from real_ai_r.macro.zeping_strategy_v12_lgbm import ZepingLGBMStrategyV12
-        # V12a: 仅滚动再训练（单horizon, 无联动特征）
-        v12a = ZepingLGBMStrategyV12(
-            horizons=(1,), horizon_weights=(1.0,),
-            enable_retrain=True, use_linkage=False,
-        )
         try:
+            from real_ai_r.macro.zeping_strategy_v12_lgbm import ZepingLGBMStrategyV12
+            # V12a: 仅滚动再训练（单horizon, 无联动特征）→ 用V12 + 单horizon
+            v12a = ZepingLGBMStrategyV12(
+                horizons=(1,), horizon_weights=(1.0,),
+                retrain_every=20, retrain_window=250,
+            )
             v12a.fit(warmup_panel)
             runners.append(ZepingRunner("V12a(Retrain)", v12a))
         except Exception as e:
             print(f"[warn] V12a training failed: {e}; skipping V12a")
 
     if "V12b" in chosen and warmup_panel is not None and len(warmup_panel) > 0:
-        from real_ai_r.macro.zeping_strategy_v12_lgbm import ZepingLGBMStrategyV12
-        # V12b: 仅多horizon融合（无滚动再训练, 无联动特征）
-        v12b = ZepingLGBMStrategyV12(
-            horizons=(1, 3, 5), horizon_weights=(0.5, 0.3, 0.2),
-            enable_retrain=False, use_linkage=False,
-        )
         try:
+            from real_ai_r.macro.zeping_strategy_v12_lgbm import ZepingLGBMStrategyV12
+            # V12b: 仅多horizon融合（无滚动再训练, 含联动特征）
+            v12b = ZepingLGBMStrategyV12(
+                horizons=(1, 3, 5), horizon_weights=(0.5, 0.3, 0.2),
+                retrain_every=999999,
+            )
             v12b.fit(warmup_panel)
             runners.append(ZepingRunner("V12b(MultiH)", v12b))
         except Exception as e:
             print(f"[warn] V12b training failed: {e}; skipping V12b")
 
     if "V12c" in chosen and warmup_panel is not None and len(warmup_panel) > 0:
-        from real_ai_r.macro.zeping_strategy_v12_lgbm import ZepingLGBMStrategyV12
-        # V12c: 仅联动特征（单horizon, 无滚动再训练）
-        v12c = ZepingLGBMStrategyV12(
-            horizons=(1,), horizon_weights=(1.0,),
-            enable_retrain=False, use_linkage=True,
-        )
         try:
+            from real_ai_r.macro.zeping_strategy_v12_lgbm import ZepingLGBMStrategyV12
+            # V12c: 仅联动特征（单horizon, 无滚动再训练）
+            v12c = ZepingLGBMStrategyV12(
+                horizons=(1,), horizon_weights=(1.0,),
+                retrain_every=999999,
+            )
             v12c.fit(warmup_panel)
             runners.append(ZepingRunner("V12c(Linkage)", v12c))
         except Exception as e:
