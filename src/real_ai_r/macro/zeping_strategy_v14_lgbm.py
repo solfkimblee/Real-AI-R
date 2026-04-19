@@ -518,11 +518,23 @@ def build_inference_features_v14(
 
     # 在V13推理结果基础上, 追加V14特征
     # 需要先拿到含历史的完整panel来计算V14特征
+    # 重要: 必须先跑V13的全部特征工程管线, 否则V14 builders缺少
+    # 依赖的中间特征(ret_5d, ret_3d, turnover_rate, track_heat等)
     all_frames = list(history) + [board_df.copy()]
     combined = pd.concat(all_frames, ignore_index=True)
     combined["date"] = pd.to_datetime(combined["date"])
 
-    # 计算V14特征（在combined上）
+    # 先运行V13的全部特征工程管线（V14 builders依赖这些中间特征）
+    combined = _build_ts_features(combined)
+    combined = _build_linkage_features(combined)
+    combined = _build_cycle_stage_features(combined)
+    combined = _build_regime_features(combined)
+    combined = _build_track_heat_features(combined)
+    combined = _build_upstream_features(combined)
+    combined = _build_redline_features(combined)
+    combined = _build_market_structure_features(combined)
+
+    # 计算V14特征（现在combined上有完整的V13中间特征）
     combined = _build_wave_features(combined)
     combined = _build_crowding_features(combined)
     combined = _build_inflation_features(combined)
